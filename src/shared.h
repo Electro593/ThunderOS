@@ -21,6 +21,7 @@
 
 #define ASSERT(Expression) (void)((Expression) ? 0 : *(vptr*)0)
 
+#define global   static
 #define internal static
 #define external
 
@@ -37,3 +38,11 @@ typedef u16 c16;
 typedef void* vptr;
 
 #define NULL (vptr)0
+
+typedef struct context {
+    vptr (API *Allocate) (u64 Size);
+    vptr (API *TempAllocate) (u64 Size);
+    
+    struct stack *Stack;
+} context;
+global context Context;
