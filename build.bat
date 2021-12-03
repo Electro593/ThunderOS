@@ -18,3 +18,4 @@ popd
 exit /b 0
 
 REM D:\Programming\C\ThunderOS\virtualbox\disk.vhd
+REM C:\Users\seilerar\programming\c\ThunderOS\virtualbox\disk.vhd
