@@ -6,7 +6,7 @@
 ** Use VBoxManage or the VirtualBox Manager GUI to make changes.
 -->
 <VirtualBox xmlns="http://www.virtualbox.org/" version="1.15-windows">
-  <Machine uuid="{9be5f09b-c529-42a5-af84-c66dcf62b862}" name="ThunderOS" OSType="Other_64" snapshotFolder="Snapshots" lastStateChange="2021-12-03T04:15:04Z">
+  <Machine uuid="{9be5f09b-c529-42a5-af84-c66dcf62b862}" name="ThunderOS" OSType="Other_64" snapshotFolder="Snapshots" lastStateChange="2021-12-03T15:51:59Z">
     <MediaRegistry>
       <HardDisks>
         <HardDisk uuid="{a4895021-d6b1-4ccd-8c05-8c801ba5fb8d}" location="D:/Programming/C/ThunderOS/virtualbox/disk.vhd" format="VHD" type="Normal"/>
@@ -46,7 +46,7 @@
       <RTC localOrUTC="UTC"/>
       <Clipboard mode="Bidirectional"/>
       <GuestProperties>
-        <GuestProperty name="/VirtualBox/HostInfo/GUI/LanguageID" value="en_US" timestamp="1638504904680416800" flags=""/>
+        <GuestProperty name="/VirtualBox/HostInfo/GUI/LanguageID" value="en_US" timestamp="1638546719958437300" flags=""/>
       </GuestProperties>
     </Hardware>
     <StorageControllers>
