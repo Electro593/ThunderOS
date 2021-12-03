@@ -8,10 +8,13 @@ REM Assembler
 
 set CompilerSwitches=%CompilerSwitches% /nologo /std:c17 /fp:fast /EHa- /FAs /FC /GF /GR- /GS- /Gs0x100000 /J /WX /Wall /X
 set CompilerSwitches=%CompilerSwitches% /wd4820 /wd4100
-set LinkerSwitches=%LinkerSwitches% /wx /incremental:no /opt:ref /opt:icf /nodefaultlib /stack:0x100000,0x100000 /subsystem:efi_boot_service_driver /machine:x64
+set LinkerSwitches=%LinkerSwitches% /wx /incremental:no /opt:ref /opt:icf /nodefaultlib /stack:0x100000,0x100000 /subsystem:efi_application /machine:x64
 
 REM Compiler
-cl %CompilerSwitches% /I ..\src\ ..\src\amd64\bootloader\entry.c /link %LinkerSwitches% /entry:EFI_Entry /out:OS.efi
+cl %CompilerSwitches% /I ..\src\ ..\src\kernel\entry.c /link %LinkerSwitches% /entry:EFI_Entry /out:OS.efi
+copy OS.efi M:\EFI\BOOT\BOOTX64.efi
 
 popd
 exit /b 0
+
+REM D:\Programming\C\ThunderOS\virtualbox\disk.vhd

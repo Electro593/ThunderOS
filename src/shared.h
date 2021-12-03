@@ -19,7 +19,7 @@
 #   define API __stdcall
 #endif
 
-#define ASSERT(Expression) (void)(!(Expression) ? *(vptr)0)
+#define ASSERT(Expression) (void)((Expression) ? 0 : *(vptr*)0)
 
 #define internal static
 #define external
@@ -35,3 +35,5 @@ typedef unsigned __int64 u64;
 typedef s08 b08;
 typedef u16 c16;
 typedef void* vptr;
+
+#define NULL (vptr)0
