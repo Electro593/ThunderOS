@@ -7,11 +7,12 @@ REM Assembler
 @REM nasm -Xvc -f coff -Werror=all -o uefi.o ..\src\amd64\bootloader\uefi_entry.asm
 
 set CompilerSwitches=%CompilerSwitches% /nologo /std:c17 /fp:fast /EHa- /FAs /FC /GF /GR- /GS- /Gs0x100000 /J /WX /Wall /X
-set CompilerSwitches=%CompilerSwitches% /wd4820 /wd4100
+set CompilerSwitches=%CompilerSwitches% /wd4820 /wd4100 /wd4061
 set LinkerSwitches=%LinkerSwitches% /wx /incremental:no /opt:ref /opt:icf /nodefaultlib /stack:0x100000,0x100000 /subsystem:efi_application /machine:x64
 
 REM Compiler
 cl %CompilerSwitches% /I ..\src\ ..\src\kernel\entry.c /link %LinkerSwitches% /entry:EFI_Entry /out:OS.efi
+
 copy OS.efi M:\EFI\BOOT\BOOTX64.efi
 
 popd
