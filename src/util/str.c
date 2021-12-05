@@ -40,7 +40,7 @@ Print(str String,
       ...)
 {
     va_list Args;
-    VA_Start(Args);
+    VA_Start(Args, String);
     
     str Result;
     Result.Length = 0;
@@ -62,13 +62,15 @@ Print(str String,
                 
                 u32 Index = 0;
                 c16 Buffer[32];
-                *C++;
+                C++;
                 while(*C != '$')
                     Buffer[Index++] = *C++;
                 ASSERT(Index <= sizeof(Buffer) / sizeof(Buffer[0]));
                 
-                if(Mem_Cmp(Buffer, "u32", Index) == EQUAL)
-                    Convert(&Addend, Type_Str, VA_Argp(Args, u32), Type_U32);
+                if(Mem_Cmp(Buffer, "u32", Index) == EQUAL) {
+                    u32 Value = VA_Next(Args, u32);
+                    Convert(&Addend, Type_Str, &Value, Type_U32);
+                }
                 
                 if(Result.Length + Addend.Length >= Result.Capacity)
                 {

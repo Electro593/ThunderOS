@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build Program",
+            "label": "Build Program (MS)",
             "type": "shell",
             "command": "./build",
             "group": {
@@ -12,9 +12,36 @@
             "problemMatcher": "$msCompile"
         },
         {
-            "label": "Run Program",
+            "label": "Build Program (SH)",
+            "type": "shell",
+            "command": "bash build.sh",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            }
+        },
+        {
+            "label": "Run Program (MS)",
             "type": "shell",
             "command": "./run",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Run Program (SH)",
+            "type": "shell",
+            "command": "bash run.sh",
             "group": {
                 "kind": "test",
                 "isDefault": true

@@ -7,7 +7,11 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#define EFI_API API
+#if defined(_MSVC)
+#   define EFI_API API
+#elif defined(_GCC)
+#   define EFI_API __attribute__((ms_abi))
+#endif
 
 #define EFI_2_90_SYSTEM_TABLE_REVISION ((2<<16) | (90))
 #define EFI_2_80_SYSTEM_TABLE_REVISION ((2<<16) | (80))
@@ -34,8 +38,8 @@
 #define EFI_DEVICE_PATH_PROTOCOL_GUID        EFI_GUID(0x09576e91, 0x6d3f, 0x11d2, 0x8e,0x39,0x00,0xa0,0xc9,0x69,0x72,0x3b)
 #define EFI_SIMPLE_TEXT_INPUT_PROTOCOL_GUID  EFI_GUID(0x387477c1, 0x69c7, 0x11d2, 0x8e,0x39,0x00,0xa0,0xc9,0x69,0x72,0x3b)
 #define EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_GUID EFI_GUID(0x387477c2, 0x69c7, 0x11d2, 0x8e,0x39,0x00,0xa0,0xc9,0x69,0x72,0x3b)
+#define EFI_LOADED_IMAGE_PROTOCOL_GUID       EFI_GUID(0x5B1B31A1, 0x9562, 0x11d2, 0x8E,0x3F,0x00,0xA0,0xC9,0x69,0x72,0x3B)
 #define EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID    EFI_GUID(0x9042a9de, 0x23dc, 0x4a38, 0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a)
-
 
 typedef u32  efi_status;
 typedef vptr efi_handle;
@@ -52,8 +56,12 @@ typedef void (EFI_API *func_EFI_EventNotify)(IN efi_event Event, IN vptr Context
 
 typedef enum efi_status_enum {
     EFI_Status_Success          = 0x00000000,
-    EFI_Status_InvalidParameter = 0x80000001,
+    EFI_Status_LoadError        = 0x80000001,
+    EFI_Status_InvalidParameter = 0x80000002,
     EFI_Status_Unsupported      = 0x80000003,
+    EFI_Status_BadBufferSize    = 0x80000004,
+    EFI_Status_BufferTooSmall   = 0x80000005,
+    EFI_Status_NotReady         = 0x80000006,
     EFI_Status_DeviceError      = 0x80000007,
 } efi_status_enum;
 
@@ -390,3 +398,25 @@ typedef struct efi_system_table {
     u64 NumberOfTableEntries;
     efi_configuration_table *ConfigurationTable;
 } efi_system_table;
+
+typedef struct efi_loaded_image_protocol {
+    u32 Revision;
+    efi_handle ParentHandle;
+    efi_system_table *SystemTable;
+    
+    // Source location of the image
+    efi_handle DeviceHandle;
+    efi_device_path_protocol *FilePath;
+    vptr Reserved;
+    
+    // Image’s load options
+    u32 LoadOptionsSize;
+    vptr LoadOptions;
+    
+    // Location where image was loaded
+    vptr ImageBase;
+    u64 ImageSize;
+    efi_memory_type ImageCodeType;
+    efi_memory_type ImageDataType;
+    efi_status (EFI_API *Unload) (IN efi_handle ImageHandle);
+} efi_loaded_image_protocol;

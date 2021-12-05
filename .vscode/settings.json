@@ -1,5 +1,12 @@
 {
     "files.associations": {
-        "dsound.h": "c"
+        "dsound.h": "c",
+        "wchar.h": "c",
+        "stddef.h": "c",
+        "efi.h": "c",
+        "varargs.h": "c",
+        "stdarg.h": "c",
+        "efilib.h": "c",
+        "uefi.h": "c"
     }
 }

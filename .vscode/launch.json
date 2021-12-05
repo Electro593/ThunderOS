@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Attach",
+            "request": "attach",
+            "type": "gdb",
+            "executable": "./build/ThunderOS_Debug.efi",
+            "target": "localhost:1234",
+            "remote": true,
+            "cwd": "${workspaceRoot}",
+            "gdbpath": "/usr/bin/gdb"
+        },
+        {
+            "name": "Launch",
+            "request": "launch",
+            "type": "gdb",
+            "target": "./build/ThunderOS_Debug.efi",
+            "cwd": "${workspaceRoot}",
+            "gdbpath": "/usr/bin/gdb"
+        },
+    ]
+}
