@@ -5,19 +5,18 @@
             "name": "Attach",
             "request": "attach",
             "type": "gdb",
-            "executable": "./build/ThunderOS_Debug.efi",
-            "target": "localhost:1234",
+            "executable": "./build/ThunderOS.efi",
+            "printCalls": true,
+            "autorun": [
+                "info files",
+                "file",
+                "add-symbol-file ./build/ThunderOS_Debug.efi 0x644D000 -s .data 0x6442000",
+                "set architecture i386:x86-64:intel"
+            ],
+            "target": ":1234",
             "remote": true,
             "cwd": "${workspaceRoot}",
             "gdbpath": "/usr/bin/gdb"
-        },
-        {
-            "name": "Launch",
-            "request": "launch",
-            "type": "gdb",
-            "target": "./build/ThunderOS_Debug.efi",
-            "cwd": "${workspaceRoot}",
-            "gdbpath": "/usr/bin/gdb"
-        },
+        }
     ]
 }

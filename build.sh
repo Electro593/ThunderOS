@@ -1,135 +1,62 @@
-if [ ! -d build ]
-then
-    mkdir ./build
+COMPILER="GCC"
+ARCH=$(uname -m | sed s,i[3456789]86,ia32,)
+SRCS="src/kernel/entry.c"
+TARGET="build/ThunderOS.efi"
+TARGET_DBG="build/ThunderOS_Debug.efi"
+CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Iuefi -Isrc"
+CFLAGS_DBG="$CFLAGS -ggdb3"
+LFLAGS="-nostdlib -shared -Bsymbolic"
+SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc"
+SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str"
+
+if [ ! -d build ]; then
+    mkdir build
 fi
 
-# # CompilerOptions="$CompilerOptions -ffreestanding -Werror -Wall -Wextra -g -Og -fpie -pie -nostdlib"
-# # CompilerOptions="$CompilerOptions -Wno-error=unused-function -Wno-error=unused-but-set-variable"
-# # echo $CompilerOptions
+if [ $ARCH = "x86_64" ]; then
+    CFLAGS="$CFLAGS -DHAVE_USE_MS_ABI -mno-red-zone"
+fi
 
-# # gcc ./src/kernel/entry.c -Isrc -o ./build/ThunderOS.efi -e EFI_Entry $CompilerOptions
+if [ $COMPILER = "GCC" ]; then
+    if [ $ARCH = "x86_64" ]; then
+        CFLAGS="$CFLAGS -maccumulate-outgoing-args"
+    fi
+    CFLAGS="$CFLAGS -Wno-builtin-declaration-mismatch -fpic -fPIC"
+    LIBS="-o ${TARGET}.so -Telf_${ARCH}_efi.lds"
+    LIBS_DBG="-o ${TARGET_DBG}.so -Telf_${ARCH}_efi.lds"
+    if [ $ARCH = "aarch64" ]; then
+        EFIARCH="pei-aarch64-little"
+    else
+        EFIARCH="efi-app-${ARCH}"
+    fi
+else
+    CFLAGS="$CFLAGS --target=${ARCH}-pc-win32-coff -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration -Wno-long-long"
+    LFLAGS="$LFLAGS -subsystem:efi_application -nodefaultlib -dll -entry:EFI_Entry"
+    LIBS_DBG="-out:${TARGET_DBG}"
+fi
 
-#     # -ffreestanding          \
-#     # -Isrc                   \
+for SRC in $SRCS; do
+    gcc $CFLAGS -c $SRC -o ${SRC}.o
+    gcc $CFLAGS_DBG -c $SRC -o ${SRC}.o
+    OBJS="$OBJS ${SRC}.o"
+done
 
-# # nasm ./src/kernel/x64/start.asm \
-# #      -o ./build/start.o
+ld  $LFLAGS $OBJS $LIBS
+ld  $LFLAGS $OBJS $LIBS_DBG
+if [ $COMPILER = "GCC" ]; then
+    objcopy $SECTIONS --target $EFIARCH --subsystem=10 ${TARGET}.so $TARGET
+    objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 ${TARGET_DBG}.so $TARGET_DBG
+fi
 
-# gcc -Isrc                      \
-#     -fpic                      \
-#     -ffreestanding             \
-#     -fno-stack-protector       \
-#     -fno-stack-check           \
-#     -mno-red-zone              \
-#     -fshort-wchar              \
-#     -maccumulate-outgoing-args \
-#     -c                         \
-#     ./src/kernel/entry.c       \
-#     -o ./build/ThunderOS.o     \
-#     -ggdb3
+objdump -S --disassemble build/ThunderOS.efi > build/listing.asm
+objdump --all-headers build/ThunderOS_Debug.efi > build/dump
 
-    
-# #    -znocombreloc       \
-# #    -nostdlib           \
-
-# ld -shared                     \
-#    -Bsymbolic                  \
-#    -Lgnuefi/                   \
-#    -Tgnuefi/elf_x86_64_efi.lds \
-#    ./gnuefi/crt0-efi-x86_64.o  \
-#    ./build/ThunderOS.o         \
-#    -o ./build/ThunderOS.so     \
-#    -lgnuefi                    \
-#    -lefi                       \
-
-# objcopy -j .text                \
-#         -j .sdata               \
-#         -j .data                \
-#         -j .dynamic             \
-#         -j .dynsym              \
-#         -j .rel                 \
-#         -j .rela                \
-#         -j .reloc               \
-#         --target=efi-app-x86_64 \
-#         --subsystem=10          \
-#         ./build/ThunderOS.so    \
-#         ./build/ThunderOS.efi
-
-# objcopy -j .text                \
-#         -j .sdata               \
-#         -j .data                \
-#         -j .dynamic             \
-#         -j .dynsym              \
-#         -j .rel                 \
-#         -j .rela                \
-#         -j .reloc               \
-#         -j .debug_info          \
-#         -j .debug_abbrev        \
-#         -j .debug_loc           \
-#         -j .debug_aranges       \
-#         -j .debug_ranges        \
-#         -j .debug_line          \
-#         -j .debug_macinfo       \
-#         -j .debug_str           \
-#         --target=efi-app-x86_64 \
-#         --subsystem=10          \
-#         ./build/ThunderOS.so    \
-#         ./build/ThunderOS_Debug.efi
-
-# # objdump -S --disassemble ./build/ThunderOS.efi > ./build/Listing.asm
-# objdump -S --disassemble ./build/ThunderOS_Debug.efi > ./build/Listing.asm
-# objdump --all-headers ./build/ThunderOS_Debug.efi > ./build/Dump
-
-# # x86_64-w64-mingw32-gcc ./src/kernel/entry.c -Isrc -o ./build/ThunderOS.efi -ffreestanding -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 -e EFI_Entry
-# # x86_64-w64-mingw32-gcc ./src/kernel/entry.c -Isrc -o ./build/ThunderOS_Debug.efi -ffreestanding -nostdlib -Wl,-dll -shared -Wl,--subsystem,10 -e EFI_Entry
-
-# # x86_64-w64-mingw32-gcc ./src/kernel/entry.c -Isrc -o ./build/ThunderOS.efi       -ffreestanding -nostdlib -fno-stack-protector -fpic -fshort-wchar -mno-red-zone -Wl,-dll -shared -Wl,--subsystem,10 -Bsymbolic       -e EFI_Entry
-# # x86_64-w64-mingw32-gcc ./src/kernel/entry.c -Isrc -o ./build/ThunderOS_Debug.efi -ffreestanding -nostdlib -fno-stack-protector -fpic -fshort-wchar -mno-red-zone -Wl,-dll -shared -Wl,--subsystem,10 -Bsymbolic -ggdb -e EFI_Entry
+find src/ build/ -name "*.o"  | xargs rm 2>/dev/null
+find src/ build/ -name "*.so" | xargs rm 2>/dev/null
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-rm uefi/*.o uefi/libuefi.a 2>/dev/null
-
-
-
-
-
-
-make
-DEBUG=1 make
-
-find src/ -name "*.o" | xargs rm
-objdump -S --disassemble ./build/ThunderOS.efi > ./build/dump.asm
-
-
-sudo qemu-nbd -c /dev/nbd0 ./emulator/disk.vhd
+sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd
 sudo mount -t auto -o rw /dev/nbd0p1 /mnt
-sudo cp ./build/ThunderOS.efi /mnt/EFI/BOOT/BOOTX64.efi
-# sudo cp ./build/ThunderOS_Debug.efi /mnt/EFI/BOOT/BOOTX64dbg.efi
+sudo cp build/ThunderOS.efi /mnt/EFI/BOOT/BOOTX64.efi
 sudo umount /dev/nbd0p1
 sudo qemu-nbd -d /dev/nbd0
