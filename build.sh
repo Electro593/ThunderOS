@@ -4,6 +4,7 @@ SRCS="src/kernel/entry.c"
 TARGET="build/ThunderOS.efi"
 TARGET_DBG="build/ThunderOS_Debug.efi"
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Iuefi -Isrc"
+CFLAGS="$CFLAGS"
 CFLAGS_DBG="$CFLAGS -ggdb3"
 LFLAGS="-nostdlib -shared -Bsymbolic"
 SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc"
@@ -36,7 +37,8 @@ else
 fi
 
 for SRC in $SRCS; do
-    gcc $CFLAGS -c $SRC -o ${SRC}.o
+    gcc $CFLAGS -E $SRC -o build/preprocessed.i
+    gcc $CFLAGS     -c $SRC -o ${SRC}.o
     gcc $CFLAGS_DBG -c $SRC -o ${SRC}.o
     OBJS="$OBJS ${SRC}.o"
 done

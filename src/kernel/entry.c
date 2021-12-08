@@ -9,8 +9,8 @@
 
 #include <shared.h>
 #include <kernel/elf.h>
-#include <kernel/efi.h>
 
+// CREDIT: POSIX-UEFI
 asm (
 "        .align 4                  \n"
 "        .globl _start             \n"
@@ -32,11 +32,49 @@ asm (
 "        .text                     \n"
 );
 
+asm (
+"        .globl setjmp         \n"
+"                              \n"
+"setjmp: pop  %rsi             \n"
+"        movq %rbx, 0x00(%rdi) \n"
+"        movq %rsp, 0x08(%rdi) \n"
+"        push %rsi             \n"
+"        movq %rbp, 0x10(%rdi) \n"
+"        movq %r12, 0x18(%rdi) \n"
+"        movq %r13, 0x20(%rdi) \n"
+"        movq %r14, 0x28(%rdi) \n"
+"        movq %r15, 0x30(%rdi) \n"
+"        movq %rsi, 0x38(%rdi) \n"
+"        xor  %rax, %rax       \n"
+"        ret                   \n"
+);
+
+asm (
+"         .globl longjmp        \n"
+"                               \n"
+"longjmp: movl %esi, %eax       \n"
+"         movq 0x00(%rdi), %rbx \n"
+"         movq 0x08(%rdi), %rsp \n"
+"         movq 0x10(%rdi), %rbp \n"
+"         movq 0x18(%rdi), %r12 \n"
+"         movq 0x20(%rdi), %r13 \n"
+"         movq 0x28(%rdi), %r14 \n"
+"         movq 0x30(%rdi), %r15 \n"
+"         xor %rdx, %rdx        \n"
+"         mov $1, %rcx          \n"
+"         cmp %rax, %rdx        \n"
+"         cmove %rcx, %rax      \n"
+"         jmp *0x38(%rdi)       \n"
+);
+
 internal void Convert(vptr Out, type TypeOut, vptr In, type TypeIn);
 
+#include <kernel/efi.h>
 #include <util/intrin.h>
 #include <util/mem.c>
+#include <util/vector.c>
 #include <util/str.c>
+#include <render/software.c>
 
 internal void
 Convert(vptr Out,
@@ -44,49 +82,74 @@ Convert(vptr Out,
         vptr In,
         type TypeIn)
 {
+    b08 IsUInt = FALSE;
     u64 UIntValue = 0;
     
     switch(TypeIn)
     {
-        case Type_U08:
-            UIntValue = (u64)*(u08*)In;
-            goto is_uint;
-        case Type_U16:
-            UIntValue = (u64)*(u16*)In;
-            goto is_uint;
-        case Type_U32:
-            UIntValue = (u64)*(u32*)In;
-            goto is_uint;
-        case Type_U64:
-            UIntValue = (u64)*(u64*)In;
+        case Type_C08p: {
+            c08 *C08p = *(c08**)In;
+            u32 Length = Mem_BytesUntil(0, C08p);
             
-            is_uint:
             switch(TypeOut)
             {
-                case Type_Str:
-                {
+                case Type_Str: {
                     str Result;
-                    Result.Capacity = 20; // Max length of unsigned 64-bit base 10
-                    Result.Data = Context.Allocate(Result.Capacity);
-                    
-                    u32 Index = Result.Capacity;
-                    do {
-                        Result.Data[--Index] = (UIntValue % 10) + L'0';
-                        UIntValue /= 10;
-                    } while(UIntValue > 0);
-                    
-                    Result.Length = Result.Capacity - Index;
-                    Result.Data += Index;
+                    Result.Length = Mem_BytesUntil(0, C08p);
+                    Result.Capacity = Result.Length;
+                    Result.Data = Context.Allocate(Result.Length * sizeof(c16));
+                    for(u32 I = 0; I < Length; ++I)
+                        Result.Data[I] = (c16)C08p[I];
                     
                     *(str*)Out = Result;
                 } break;
-                
-                NO_DEFAULT;
             }
-            
-            break;
+        } break;
+        
+        case Type_U08: {
+            UIntValue = (u64)*(u08*)In;
+            IsUInt = TRUE;
+        } break;
+        case Type_U16: {
+            UIntValue = (u64)*(u16*)In;
+            IsUInt = TRUE;
+        } break;
+        case Type_U32: {
+            UIntValue = (u64)*(u32*)In;
+            IsUInt = TRUE;
+        } break;
+        case Type_U64: {
+            UIntValue = *(u64*)In;
+            IsUInt = TRUE;
+        } break;
         
         NO_DEFAULT;
+    }
+    
+    if(IsUInt)
+    {
+        switch(TypeOut)
+        {
+            case Type_Str:
+            {
+                str Result;
+                Result.Capacity = 20; // Max length of unsigned 64-bit base 10
+                Result.Data = Context.Allocate(Result.Capacity);
+                
+                u32 Index = Result.Capacity;
+                do {
+                    Result.Data[--Index] = (UIntValue % 10) + L'0';
+                    UIntValue /= 10;
+                } while(UIntValue > 0);
+                
+                Result.Length = Result.Capacity - Index;
+                Result.Data += Index;
+                
+                *(str*)Out = Result;
+            } break;
+            
+            NO_DEFAULT;
+        }
     }
 }
 
@@ -164,22 +227,21 @@ EFI_Entry(u64 LoadBase,
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Waiting for debugger...\n\r");
     
-    asm ("int $3");
+    // asm ("int $3");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Debugger Connected!\n\r");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Welcome to ThunderOS.\n\r");
-    
-    
     
     Context.PrevContext = (context*)&Context.PrevContext;
     Context.Allocate = Stack_Allocate;
     
     vptr MemBase;
     u64 StackSize = 1 * 1024 * 1024;
-    Status = SystemTable->BootServices->AllocatePool(EFI_MemoryType_Conventional, StackSize, &MemBase);
+    Status = SystemTable->BootServices->AllocatePool(LoadedImage->ImageDataType, StackSize, &MemBase);
     ASSERT(Status == EFI_Status_Success);
     u08 *MemCursor = MemBase;
     
-    Context.Stack = Stack_Init(MemCursor, StackSize);
+    stack *Stack = Stack_Init(MemCursor, StackSize);
+    Context.Stack = Stack;
     MemCursor += StackSize;
     
     
@@ -199,25 +261,68 @@ EFI_Entry(u64 LoadBase,
     NativeMode = GOP->Mode->Mode;
     NumModes = GOP->Mode->MaxMode;
     
-    u32 Mode = NativeMode; UNUSED(Mode);
-    // Status = GOP->SetMode(GOP, Mode);
-    ASSERT(Status == EFI_Status_Success);
-    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Entering graphics output mode...\n\r");
-    str Output = Printc(L"\tPixels per line: $u32$\n\r", GOP->Mode->Info->PixelsPerScanLine);
-    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Output.Data);
+    str String;
+    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Querying graphics modes...\n\r");
+    u32 Mode = NativeMode;
+    for(u32 Index = 0;
+        Index < NumModes;
+        ++Index)
+    {
+        Status = GOP->QueryMode(GOP, Index, &SizeOfInfo, &Info);
+        String = Printc(L"    Mode $u32$: Width $u32$, height $u32$, format $u32$ $c08*$\n\r",
+            Index, Info->HorizontalResolution, Info->VerticalResolution, Info->PixelFormat,
+            (Index == NativeMode) ? "(current)" : "");
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, String.Data);
+        
+    }
     
-    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Exiting boot services.\n\r");
-    u64 MapKey;
-    SystemTable->BootServices->GetMemoryMap(NULL, NULL, &MapKey, NULL, NULL);
-    Status = SystemTable->BootServices->ExitBootServices(ImageHandle, MapKey);
-    ASSERT(Status == EFI_Status_Success);
-    SystemTable->ConsoleIn           = NULL;
-    SystemTable->ConsoleInHandle     = NULL;
-    SystemTable->ConsoleOut          = NULL;
-    SystemTable->ConsoleOutHandle    = NULL;
-    SystemTable->StandardErrorHandle = NULL;
-    SystemTable->StandardError       = NULL;
-    SystemTable->BootServices        = NULL;
+    efi_graphics_output_blt_pixel Pixel = {0};
+    GOP->Blt(GOP, &Pixel, EFI_GraphicsOutputBltOperation_VideoFill, 0, 0, 0, 0, 800, 600, 0);
+    
+    // u32 Pitch = GOP->Mode->Info->PixelsPerScanLine;
+    // for(u32 Y = 50; Y < 50+16; ++Y)
+    // {
+    //     for(u32 X = 50; X < 50+16; ++X)
+    //     {
+    //         *((u32*)(GOP->Mode->FrameBufferBase + 4*GOP->Mode->Info->PixelsPerScanLine * Y + 4*X)) = 0x000000FF;
+    //     }
+    // }
+    
+    software_renderer Renderer = {0};
+    Renderer.Format = GOP->Mode->Info->PixelFormat == EFI_GraphicsPixelFormat_BlueGreenRedReserved8BitPerColor ? PixelFormat_BGRX_8 : PixelFormat_RGBX_8;
+    Renderer.Size = (v2u32){GOP->Mode->Info->HorizontalResolution,
+                            GOP->Mode->Info->VerticalResolution};
+    Renderer.Framebuffer = (u08*)GOP->Mode->FrameBufferBase;
+    Renderer.Pitch = 4 * GOP->Mode->Info->PixelsPerScanLine;
+    Renderer.BackgroundColor = MAKE_COLOR(Renderer.Format, ((v4u08){0,0,0,0}));
+    // DrawLine(&Renderer, (v2r32){0.25f,0.5f}, (v2r32){0.75f,0.5f},
+    //                     (v4u08){255, 0, 0, 0}, (v4u08){255, 255, 255, 0});
+    // DrawLine(&Renderer, (v2r32){0.4f,0.55f}, (v2r32){0.9f,0.9f},
+    //                     (v4u08){255, 0, 255, 0}, (v4u08){0, 255, 0, 0});
+    
+    v3r64 Vertices[] = {{-1,-1,-1},{0,1,-1},{1,-1,-1}};
+    v4u08 Colors[] = {{255,255,255,0},{255,255,255,0},{255,255,255,0}};
+    
+    // Rasterize(&Renderer, Vertices, Colors, 1);
+    Raytrace(&Renderer, Vertices, Colors[0], 1);
+    
+    // SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Exiting boot services.\n\r");
+    // u64 MapKey, MemoryMapSize;
+    // Status = SystemTable->BootServices->GetMemoryMap(&MemoryMapSize, NULL, &MapKey, NULL, NULL);
+    // ASSERT(Status == EFI_Status_BufferTooSmall);
+    // Status = SystemTable->BootServices->ExitBootServices(ImageHandle, MapKey);
+    // ASSERT(Status == EFI_Status_Success);
+    // SystemTable->ConsoleIn           = NULL;
+    // SystemTable->ConsoleInHandle     = NULL;
+    // SystemTable->ConsoleOut          = NULL;
+    // SystemTable->ConsoleOutHandle    = NULL;
+    // SystemTable->StandardErrorHandle = NULL;
+    // SystemTable->StandardError       = NULL;
+    // SystemTable->BootServices        = NULL;
+    
+    b08 Wait = TRUE;
+    while(Wait)
+        asm ("pause");
     
     return EFI_Status_Success;
 }

@@ -8,6 +8,20 @@
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 
+internal vptr
+Mem_Set(vptr Dest,
+        u08 Data,
+        u64 Size)
+{
+    u08 *D08 = (u08*)Dest;
+    while(Size)
+    {
+        *D08++ = Data;
+        Size--;
+    }
+    
+    return Dest;
+}
 
 internal vptr
 Mem_Cpy(vptr Dest,
@@ -16,9 +30,10 @@ Mem_Cpy(vptr Dest,
 {
     u08 *D08 = (u08*)Dest;
     u08 *S08 = (u08*)Src;
-    while(Size--)
+    while(Size)
     {
         *D08++ = *S08++;
+        Size--;
     }
     
     return Dest;
@@ -31,15 +46,31 @@ Mem_Cmp(vptr A,
 {
     u08 *CA = (u08*)A;
     u08 *CB = (u08*)B;
-    while(Size-- && *CA == *CB)
+    while(Size && *CA == *CB)
     {
         CA++;
         CB++;
+        Size--;
     }
     
     if(Size == 0) return EQUAL;
     if(CA < CB)   return GREATER;
     return LESS;
+}
+
+internal u32
+Mem_BytesUntil(u08 Byte, vptr Data)
+{
+    u08 *Data08 = (u08*)Data;
+    u32 Length = 0;
+    
+    while(*Data08 != Byte)
+    {
+        Data08++;
+        Length++;
+    }
+    
+    return Length;
 }
 
 

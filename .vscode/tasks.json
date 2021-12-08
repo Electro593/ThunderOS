@@ -5,20 +5,14 @@
             "label": "Build Program (MS)",
             "type": "shell",
             "command": "./build",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
+            "group": "build",
             "problemMatcher": "$msCompile"
         },
         {
             "label": "Build Program (SH)",
             "type": "shell",
             "command": "bash build.sh",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
+            "group": "build",
             "problemMatcher": "$gcc",
             "presentation": {
                 "echo": true,
@@ -46,6 +40,6 @@
                 "kind": "test",
                 "isDefault": true
             }
-        },
+        }
     ]
 }

@@ -30,7 +30,7 @@ Str(c16 *String)
     str Result;
     Result.Data = String;
     Result.Length = Str_Len(String) + 1;
-    Result.Capacity = Str_Len(String) + 1;
+    Result.Capacity = Result.Length;
     return Result;
 }
 
@@ -52,9 +52,9 @@ Print(str String,
         CI < String.Length;
         CI++)
     {
-        if(*C == '$')
+        if(*C == L'$')
         {
-            if(*(C-1) == '\\') // Escaped, just overwrite the backslash
+            if(CI > 0 && *(C-1) == L'\\') // Escaped, just overwrite the backslash
                 Result.Data[Result.Length - 1] = *C;
             else
             {
@@ -63,11 +63,17 @@ Print(str String,
                 u32 Index = 0;
                 c16 Buffer[32];
                 C++;
-                while(*C != '$')
+                while(*C != L'$')
                     Buffer[Index++] = *C++;
                 ASSERT(Index <= sizeof(Buffer) / sizeof(Buffer[0]));
                 
-                if(Mem_Cmp(Buffer, "u32", Index) == EQUAL) {
+                if(Mem_Cmp(Buffer, L"c08*", Index) == EQUAL)
+                {
+                    c08 *Value = VA_Next(Args, c08*);
+                    Convert(&Addend, Type_Str, &Value, Type_C08p);
+                }
+                else if(Mem_Cmp(Buffer, L"u32", Index) == EQUAL)
+                {
                     u32 Value = VA_Next(Args, u32);
                     Convert(&Addend, Type_Str, &Value, Type_U32);
                 }
@@ -79,10 +85,10 @@ Print(str String,
                         Result.Capacity *= 2;
                     
                     Result.Data = Context.Allocate(Result.Capacity * sizeof(c16));
-                    Mem_Cpy(Result.Data, OldData, Result.Length);
+                    Mem_Cpy(Result.Data, OldData, Result.Length * sizeof(c16));
                 }
                 
-                Mem_Cpy(Result.Data, Addend.Data, Addend.Length);
+                Mem_Cpy(Result.Data + Result.Length, Addend.Data, Addend.Length * sizeof(c16));
                 Result.Length += Addend.Length;
             }
         }
@@ -93,7 +99,7 @@ Print(str String,
                 c16 *OldData = Result.Data;
                 Result.Capacity *= 2;
                 Result.Data = Context.Allocate(Result.Capacity * sizeof(c16));
-                Mem_Cpy(Result.Data, OldData, Result.Length);
+                Mem_Cpy(Result.Data, OldData, Result.Length * sizeof(c16));
             }
             
             Result.Data[Result.Length++] = *C;
@@ -102,7 +108,6 @@ Print(str String,
         C++;
     }
     
-    #undef RESIZE_IF_NECESSARY
     VA_End(Args);
     return Result;
 }

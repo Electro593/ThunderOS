@@ -41,7 +41,6 @@
 #define EFI_LOADED_IMAGE_PROTOCOL_GUID       EFI_GUID(0x5B1B31A1, 0x9562, 0x11d2, 0x8E,0x3F,0x00,0xA0,0xC9,0x69,0x72,0x3B)
 #define EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID    EFI_GUID(0x9042a9de, 0x23dc, 0x4a38, 0x96,0xfb,0x7a,0xde,0xd0,0x80,0x51,0x6a)
 
-typedef u32  efi_status;
 typedef vptr efi_handle;
 typedef vptr efi_event;
 typedef u64  efi_tpl;
@@ -54,16 +53,16 @@ typedef void (EFI_API *func_EFI_EventNotify)(IN efi_event Event, IN vptr Context
 
 
 
-typedef enum efi_status_enum {
-    EFI_Status_Success          = 0x00000000,
-    EFI_Status_LoadError        = 0x80000001,
-    EFI_Status_InvalidParameter = 0x80000002,
-    EFI_Status_Unsupported      = 0x80000003,
-    EFI_Status_BadBufferSize    = 0x80000004,
-    EFI_Status_BufferTooSmall   = 0x80000005,
-    EFI_Status_NotReady         = 0x80000006,
-    EFI_Status_DeviceError      = 0x80000007,
-} efi_status_enum;
+typedef enum efi_status {
+    EFI_Status_Success          = 0x00,
+    EFI_Status_LoadError        = 0x01,
+    EFI_Status_InvalidParameter = 0x02,
+    EFI_Status_Unsupported      = 0x03,
+    EFI_Status_BadBufferSize    = 0x04,
+    EFI_Status_BufferTooSmall   = 0x05,
+    EFI_Status_NotReady         = 0x06,
+    EFI_Status_DeviceError      = 0x07,
+} efi_status;
 
 typedef enum efi_tpl_enum {
     EFI_TPL_Application =  4,

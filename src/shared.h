@@ -25,8 +25,12 @@
 #endif
 
 #define STATIC_ASSERT(Expression, Message) _Static_assert(Expression, Message);
-#define ASSERT(Expression) (void)((Expression) ? 0 : *(vptr*)0)
+#define ASSERT(Expression) {if(!(Expression)) asm volatile ("int $3"); }
 #define NO_DEFAULT default: { ASSERT(FALSE); }
+#define SWAP(A, B) { typeof(A) Temp = A; A = B; B = Temp; }
+#define LITERAL_CAST(EndType, StartType, ...) (*(EndType*)&(StartType){__VA_ARGS__})
+#define FORCE_CAST(Type, ...) (*(Type*)&(__VA_ARGS__))
+#define BIT_CLEAR(Bitstring, Index) ((Bitstring) & ~(1ULL << (Index)))
 
 #define global   static
 #define internal static
@@ -56,6 +60,8 @@
                   "Int sizes are incorrect");
 #endif
 
+typedef float r32;
+typedef double r64;
 typedef s08 b08;
 typedef u08 c08;
 typedef u16 c16;
@@ -75,12 +81,13 @@ typedef struct context {
     
     struct context *PrevContext;
 } context;
-global context Context;
+global volatile context Context;
 
 typedef enum type {
+    Type_C08p,
+    Type_Str,
     Type_U08,
     Type_U16,
     Type_U32,
     Type_U64,
-    Type_Str,
 } type;
