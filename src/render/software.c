@@ -129,44 +129,58 @@ Raytrace(software_renderer *Renderer,
     #define R64_MAX LITERAL_CAST(r64, u64, 0x7FEFFFFFFFFFFFFF)
     #define R64_EPSILON LITERAL_CAST(r64, u64, 7)
     
-    v3r64 View = {(r64)Renderer->Size.X, (r64)Renderer->Size.Y, -1};
-    v3r64 E = {0, 0, 0}; // Eye
+    v2u32 Size = Renderer->Size;
+    v3r64 View = {(r64)Size.X, (r64)Size.Y, 0};
     u32 C = MAKE_COLOR(Renderer->Format, Color);
     u32 VertexCount = 3 * TriangleCount;
     
-    for(u32 Y = 0; Y < Renderer->Size.Y; ++Y)
+    // P = <((X / S.X) * 2) - 1, ((Y / S.Y) * 2) - 1, S.Z>
+    
+    //       Origin = O = <IN>
+    //        Pixel = P = <IN>
+    //          Ray = R = P - O
+    //   Vertex 0-3 = V = <IN>
+    //       Normal = N = (V2-V0) x (V1-V0)
+    //                t = (N*V0 - N*O) / (N*R)
+    // Intersection = I = O + t*R
+    
+    v3r64 O, P, R, V0,V1,V2, N, I;
+    r64 t, tN, NR;
+    
+    
+    O = V3r64(0, 0, 1);
+    
+    for(u32 Y = 0; Y < Size.Y; ++Y)
     {
-        u32 WriteOffset = (Renderer->Size.Y - Y - 1)*Renderer->Size.X;
+        u32 WriteOffset = (Size.Y - Y - 1)*Size.X;
         
-        for(u32 X = 0; X < Renderer->Size.X; ++X)
+        for(u32 X = 0; X < Size.X; ++X)
         {
-            // X = 0..W -> 0..1 -> 0..2 -> -1..1
-            v3r64 Pixel = {(((r64)X/View.X)*2)-1, (((r64)Y/View.Y)*2)-1, View.Z};
-            v3r64 R = V3r64_Sub(Pixel, E);
-            r64 Nearest = R64_MAX;
+            P = V3r64((((r64)X/View.X)*2)-1, (((r64)Y/View.Y)*2)-1, View.Z);
+            R = V3r64_Sub(P, O);
+            tN = R64_MAX;
             
             for(u32 K = 0; K < VertexCount; K += 3)
             {
-                v3r64 V0 = Vertices[K+0];
-                v3r64 V1 = Vertices[K+1];
-                v3r64 V2 = Vertices[K+2];
-                v3r64 N = V3r64_Cross(V3r64_Sub(V1, V0), V3r64_Sub(V2, V0));
-                r64 NR = V3r64_Dot(N, R);
-                if(R64_Abs(NR) < R64_EPSILON) continue;
-                r64 D = V3r64_Dot(N, V0);
-                r64 t = (V3r64_Dot(N, E) + D) / V3r64_Dot(N, R);
-                if(t < 0) continue;
-                v3r64 I = V3r64_Add(E, V3r64_Mul_VS(R, t));
-                if(V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V1, V0), V3r64_Sub(I, V0))) < 0 ||
-                   V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V2, V1), V3r64_Sub(I, V1))) < 0 ||
-                   V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V0, V2), V3r64_Sub(I, V2))) < 0)
+                V0 = Vertices[K+0];
+                V1 = Vertices[K+1];
+                V2 = Vertices[K+2];
+                N = V3r64_Cross(V3r64_Sub(V2, V0), V3r64_Sub(V1, V0));
+                NR = V3r64_Dot(N, R);
+                if(NR < R64_EPSILON) continue; // Facing the wrong way
+                t = V3r64_Dot(N, V3r64_Sub(V0, O)) / NR;
+                if(t < 0) continue; // Triangle is behind the viewer
+                I = V3r64_Add(O, V3r64_Mul_VS(R, t));
+                if(V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V2, V0), V3r64_Sub(I, V0))) < 0 ||
+                   V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V0, V1), V3r64_Sub(I, V1))) < 0 ||
+                   V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V1, V2), V3r64_Sub(I, V2))) < 0)
                     continue;
                 
-                if(t < Nearest)
-                    Nearest = t;
+                if(t < tN)
+                    tN = t;
             }
             
-            if(Nearest == R64_MAX)
+            if(tN == R64_MAX)
                 *((u32*)Renderer->Framebuffer + WriteOffset + X) = Renderer->BackgroundColor;
             else
                 *((u32*)Renderer->Framebuffer + WriteOffset + X) = C;

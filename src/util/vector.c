@@ -44,9 +44,11 @@
 #define MAC_ALLBUTLAST(...) MAC_PASTE_2(MAC_PRE_, MAC_PRED(_MAC_NARG(__VA_ARGS__)))(__VA_ARGS__,)
 
 #define MAC_FOR_OP_SEP_REV(NAME, ITER, PREV, CURR) CURR; PREV
+#define MAC_FOR_OP_SEQ_REV(NAME, ITER, PREV, CURR) CURR, PREV
 #define MAC_FOR_OP_NAME_REV(NAME, ITER, PREV, CURR) CURR NAME PREV
 
 #define MAC_FOR_FUNC_DECLVAR(NAME, ARG, ITER) NAME ARG
+#define MAC_FOR_FUNC_V_ASSIGN(NAME, ARG, ITER) Result.ARG = ARG
 #define MAC_FOR_FUNC_V_OP(NAME, ARG, ITER) Result.ARG = NAME V.ARG
 #define MAC_FOR_FUNC_VV_OP(NAME, ARG, ITER) Result.ARG = A.ARG NAME B.ARG
 #define MAC_FOR_FUNC_VS_OP(NAME, ARG, ITER) Result.ARG = V.ARG NAME S
@@ -68,6 +70,16 @@
         }; \
         Type E[Count]; \
     } v##Count##Type;
+
+#define DEFINE_VECTOR_INIT(Count, Type) \
+    internal v##Count##Type \
+    V##Count##Type( \
+        MAC_FOR(Type, Count, MAC_FOR_OP_SEQ_REV, MAC_FOR_FUNC_DECLVAR, MAC_FOR_ARGS_VEC)) \
+    { \
+        v##Count##Type Result; \
+        MAC_FOR(, Count, MAC_FOR_OP_SEP_REV, MAC_FOR_FUNC_V_ASSIGN, MAC_FOR_ARGS_VEC); \
+        return Result; \
+    }
 
 #define DEFINE_VECTOR_ADD(Count, Type) \
     internal v##Count##Type \
@@ -146,6 +158,8 @@ DECLARE_VECTOR_TYPE(3, r64)
 DECLARE_VECTOR_TYPE(4, u08)
 DECLARE_VECTOR_TYPE(2, u16)
 DECLARE_VECTOR_TYPE(2, u32)
+
+DEFINE_VECTOR_INIT(3, r64)
 
 DEFINE_VECTOR_ADD(3, r64)
 DEFINE_VECTOR_SUB(3, r64)
