@@ -3,8 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/src/**",
-                "${workspaceFolder}/uefi/**"
+                "${workspaceFolder}/src/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

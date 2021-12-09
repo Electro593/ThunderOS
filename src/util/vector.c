@@ -144,6 +144,15 @@
         return Result; \
     }
 
+#define DEFINE_VECTOR_LEN(Count, Type) \
+    internal r64 \
+    V##Count##Type##_Len(v##Count##Type V) \
+    { \
+        r64 Result = V##Count##Type##_Dot(V, V); \
+        asm("fsqrt" : "+t" (Result)); \
+        return Result; \
+    }
+
 #define DEFINE_VECTOR_CAST(Count, FromType, ToType) \
     internal v##Count##ToType \
     V##Count##FromType##_ToV##Count##ToType(v##Count##FromType V) \
@@ -155,24 +164,36 @@
 
 DECLARE_VECTOR_TYPE(2, r32)
 DECLARE_VECTOR_TYPE(3, r64)
+DECLARE_VECTOR_TYPE(4, r64)
 DECLARE_VECTOR_TYPE(4, u08)
 DECLARE_VECTOR_TYPE(2, u16)
 DECLARE_VECTOR_TYPE(2, u32)
 
 DEFINE_VECTOR_INIT(3, r64)
+DEFINE_VECTOR_INIT(4, u08)
 
 DEFINE_VECTOR_ADD(3, r64)
+DEFINE_VECTOR_ADD(4, u08)
+
 DEFINE_VECTOR_SUB(3, r64)
 
 DEFINE_VECTOR_MUL_VS(3, r64)
-DEFINE_VECTOR_MUL_VV(3, r64)
+DEFINE_VECTOR_MUL_VS(4, r64)
+DEFINE_VECTOR_MUL_VS(4, u08)
+
 DEFINE_VECTOR_MUL_VV(2, r32)
+DEFINE_VECTOR_MUL_VV(3, r64)
 
 DEFINE_VECTOR_DOT(3, r64)
+
 DEFINE_VECTOR_CROSS(3, r64)
+
+DEFINE_VECTOR_LEN(3, r64)
 
 DEFINE_VECTOR_CAST(2, r32, u32)
 DEFINE_VECTOR_CAST(2, u32, r32)
+DEFINE_VECTOR_CAST(4, u08, r64)
+DEFINE_VECTOR_CAST(4, r64, u08)
 
 #undef DEFINE_VECTOR_MUL_VS
 #undef DEFINE_VECTOR_EQUAL

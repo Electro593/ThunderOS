@@ -227,7 +227,9 @@ EFI_Entry(u64 LoadBase,
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Waiting for debugger...\n\r");
     
-    // asm ("int $3");
+    while(WaitingForDebugger)
+        asm ("pause");
+    
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Debugger Connected!\n\r");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Welcome to ThunderOS.\n\r");
     
@@ -294,18 +296,21 @@ EFI_Entry(u64 LoadBase,
                             GOP->Mode->Info->VerticalResolution};
     Renderer.Framebuffer = (u08*)GOP->Mode->FrameBufferBase;
     Renderer.Pitch = 4 * GOP->Mode->Info->PixelsPerScanLine;
-    Renderer.BackgroundColor = MAKE_COLOR(Renderer.Format, ((v4u08){0,0,0,0}));
+    Renderer.BackgroundColor = V4u08(0, 0, 0, 0);
     // DrawLine(&Renderer, (v2r32){0.25f,0.5f}, (v2r32){0.75f,0.5f},
     //                     (v4u08){255, 0, 0, 0}, (v4u08){255, 255, 255, 0});
     // DrawLine(&Renderer, (v2r32){0.4f,0.55f}, (v2r32){0.9f,0.9f},
     //                     (v4u08){255, 0, 255, 0}, (v4u08){0, 255, 0, 0});
     
-    v3r64 Vertices[] = {{-1,-1,0},{0,1,0},{1,-1,0}};
-    // v3r64 Vertices[] = {{-1,-1,0},{1,-1,0},{0,1,0}};
-    v4u08 Colors[] = {{255,255,255,0},{255,255,255,0},{255,255,255,0}};
+    v3r64 Vertices[] = {{-1,-1,0},{0,1,0},{1,-1,0},
+                        {-1,1,0},{0,1,0},{-1,0,0},
+                        {-.5,-.5,0.1},{0,.5,0.1},{.5,-.5,0.1}};
+    v4u08 Colors[] = {{255,0,0,0},{0,255,0,0},{0,0,255,0},
+                      {0,255,255,0},{255,0,255,0},{255,255,0,0},
+                      {0,255,255,0},{255,0,255,0},{255,255,0,0}};
     
     // Rasterize(&Renderer, Vertices, Colors, 1);
-    Raytrace(&Renderer, Vertices, Colors[0], 1);
+    Raytrace(&Renderer, V3r64(0, 0, 1), Vertices, Colors, 3);
     
     // SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Exiting boot services.\n\r");
     // u64 MapKey, MemoryMapSize;

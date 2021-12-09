@@ -20,7 +20,7 @@ typedef struct software_renderer {
     
     v2u32 Size;
     u32 Pitch;
-    u32 BackgroundColor;
+    v4u08 BackgroundColor;
     pixel_format Format;
 } software_renderer;
 
@@ -121,69 +121,100 @@ R64_Abs(r64 S)
 
 internal void
 Raytrace(software_renderer *Renderer,
+         v3r64 Eye,
          v3r64 *Vertices,
-         v4u08 Color,
+         v4u08 *Colors,
          u32 TriangleCount)
 {
     #define PI 3.14159265359
     #define R64_MAX LITERAL_CAST(r64, u64, 0x7FEFFFFFFFFFFFFF)
     #define R64_EPSILON LITERAL_CAST(r64, u64, 7)
     
+    typedef struct _raytracer_triangle {
+        v4r64 C0, C1, C2;
+        v3r64 V0;
+        v3r64 N;
+        v3r64 NcV02;
+        v3r64 V01cN;
+        r64 NdN;
+        r64 tNumerator;
+    } _raytracer_triangle;
+    
+    u32 BackgroundColor = MAKE_COLOR(Renderer->Format, Renderer->BackgroundColor);
     v2u32 Size = Renderer->Size;
     v3r64 View = {(r64)Size.X, (r64)Size.Y, 0};
-    u32 C = MAKE_COLOR(Renderer->Format, Color);
-    u32 VertexCount = 3 * TriangleCount;
+    v3r64 O = Eye;
+    v3r64 P; P.Z = View.Z;
     
-    // P = <((X / S.X) * 2) - 1, ((Y / S.Y) * 2) - 1, S.Z>
-    
-    //       Origin = O = <IN>
-    //        Pixel = P = <IN>
-    //          Ray = R = P - O
-    //   Vertex 0-3 = V = <IN>
-    //       Normal = N = (V2-V0) x (V1-V0)
-    //                t = (N*V0 - N*O) / (N*R)
-    // Intersection = I = O + t*R
-    
-    v3r64 O, P, R, V0,V1,V2, N, I;
-    r64 t, tN, NR;
-    
-    
-    O = V3r64(0, 0, 1);
+    _raytracer_triangle *Ts = Context.Allocate(TriangleCount * sizeof(_raytracer_triangle));
+    for(u32 K = 0; K < TriangleCount; ++K)
+    {
+        Ts[K].C0 = V4u08_ToV4r64(Colors[(K*3)+0]);
+        Ts[K].C1 = V4u08_ToV4r64(Colors[(K*3)+1]);
+        Ts[K].C2 = V4u08_ToV4r64(Colors[(K*3)+2]);
+        Ts[K].V0 = Vertices[(K*3)+0];
+        v3r64 V1 = Vertices[(K*3)+1];
+        v3r64 V2 = Vertices[(K*3)+2];
+        v3r64 V01 = V3r64_Sub(V1, Ts[K].V0);
+        v3r64 V02 = V3r64_Sub(V2, Ts[K].V0);
+        Ts[K].N = V3r64_Cross(V02, V01);
+        Ts[K].NcV02 = V3r64_Cross(Ts[K].N, V02);
+        Ts[K].V01cN = V3r64_Cross(V01, Ts[K].N);
+        Ts[K].NdN = V3r64_Dot(Ts[K].N, Ts[K].N);
+        Ts[K].tNumerator = V3r64_Dot(Ts[K].N, V3r64_Sub(Ts[K].V0, O));
+    }
     
     for(u32 Y = 0; Y < Size.Y; ++Y)
     {
         u32 WriteOffset = (Size.Y - Y - 1)*Size.X;
+        P.Y = (((r64)Y / View.Y) * 2) - 1;
         
         for(u32 X = 0; X < Size.X; ++X)
         {
-            P = V3r64((((r64)X/View.X)*2)-1, (((r64)Y/View.Y)*2)-1, View.Z);
-            R = V3r64_Sub(P, O);
-            tN = R64_MAX;
+            P.X = (((r64)X / View.X) * 2) - 1;
+            v3r64 R = V3r64_Sub(P, O);
+            r64 tN = R64_MAX;
+            r64 uN = 0, vN = 0, wN = 0;
+            _raytracer_triangle *TN = Ts;
             
-            for(u32 K = 0; K < VertexCount; K += 3)
+            for(u32 K = 0; K < TriangleCount; ++K)
             {
-                V0 = Vertices[K+0];
-                V1 = Vertices[K+1];
-                V2 = Vertices[K+2];
-                N = V3r64_Cross(V3r64_Sub(V2, V0), V3r64_Sub(V1, V0));
-                NR = V3r64_Dot(N, R);
-                if(NR < R64_EPSILON) continue; // Facing the wrong way
-                t = V3r64_Dot(N, V3r64_Sub(V0, O)) / NR;
-                if(t < 0) continue; // Triangle is behind the viewer
-                I = V3r64_Add(O, V3r64_Mul_VS(R, t));
-                if(V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V2, V0), V3r64_Sub(I, V0))) < 0 ||
-                   V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V0, V1), V3r64_Sub(I, V1))) < 0 ||
-                   V3r64_Dot(N, V3r64_Cross(V3r64_Sub(V1, V2), V3r64_Sub(I, V2))) < 0)
-                    continue;
+                r64 NR = V3r64_Dot(Ts[K].N, R);
+                if(NR > R64_EPSILON)
+                    continue; // Facing the wrong way
+                
+                r64 t = Ts[K].tNumerator / NR;
+                if(t < 0)
+                    continue; // Triangle is behind the viewer
+                
+                v3r64 I = V3r64_Add(O, V3r64_Mul_VS(R, t));
+                v3r64 V0I = V3r64_Sub(I, Ts[K].V0);
+                r64 u = V3r64_Dot(Ts[K].V01cN, V0I) / Ts[K].NdN;
+                r64 v = V3r64_Dot(Ts[K].NcV02, V0I) / Ts[K].NdN;
+                r64 w = 1 - u - v;
+                if(u < 0 || v < 0 || w < 0)
+                    continue; // Outside of triangle
                 
                 if(t < tN)
+                {
                     tN = t;
+                    TN = Ts + K;
+                    uN = u;
+                    vN = v;
+                    wN = w;
+                }
             }
             
+            v4u08 C0 = V4r64_ToV4u08(V4r64_Mul_VS(TN->C0, wN));
+            v4u08 C1 = V4r64_ToV4u08(V4r64_Mul_VS(TN->C1, vN));
+            v4u08 C2 = V4r64_ToV4u08(V4r64_Mul_VS(TN->C2, uN));
+            v4u08 C = V4u08_Add(V4u08_Add(C0, C1), C2);
+            u32 Color = MAKE_COLOR(Renderer->Format, C);
+            
             if(tN == R64_MAX)
-                *((u32*)Renderer->Framebuffer + WriteOffset + X) = Renderer->BackgroundColor;
+                *((u32*)Renderer->Framebuffer + WriteOffset + X) = BackgroundColor;
             else
-                *((u32*)Renderer->Framebuffer + WriteOffset + X) = C;
+                *((u32*)Renderer->Framebuffer + WriteOffset + X) = Color;
         }
     }
 }

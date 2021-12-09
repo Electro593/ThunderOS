@@ -82,6 +82,7 @@ typedef struct context {
     struct context *PrevContext;
 } context;
 global volatile context Context;
+global volatile b08 WaitingForDebugger;
 
 typedef enum type {
     Type_C08p,

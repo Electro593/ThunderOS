@@ -7,6 +7,7 @@
         "varargs.h": "c",
         "stdarg.h": "c",
         "efilib.h": "c",
-        "uefi.h": "c"
+        "uefi.h": "c",
+        "emmintrin.h": "c"
     }
 }
