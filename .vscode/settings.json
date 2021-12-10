@@ -8,6 +8,13 @@
         "stdarg.h": "c",
         "efilib.h": "c",
         "uefi.h": "c",
-        "emmintrin.h": "c"
+        "emmintrin.h": "c",
+        "intrin.h": "c",
+        "xmmintrin.h": "c",
+        "nmmintrin.h": "c",
+        "ammintrin.h": "c",
+        "mmintrin.h": "c",
+        "immintrin.h": "c",
+        "pmmintrin.h": "c"
     }
 }

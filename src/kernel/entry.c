@@ -227,8 +227,7 @@ EFI_Entry(u64 LoadBase,
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Waiting for debugger...\n\r");
     
-    while(WaitingForDebugger)
-        asm ("pause");
+    // asm ("int $3");
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Debugger Connected!\n\r");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Welcome to ThunderOS.\n\r");
@@ -302,15 +301,16 @@ EFI_Entry(u64 LoadBase,
     // DrawLine(&Renderer, (v2r32){0.4f,0.55f}, (v2r32){0.9f,0.9f},
     //                     (v4u08){255, 0, 255, 0}, (v4u08){0, 255, 0, 0});
     
-    v3r64 Vertices[] = {{-1,-1,0},{0,1,0},{1,-1,0},
+    v3r32 Vertices[] = {{-1,-1,0},{0,1,0},{1,-1,0},
                         {-1,1,0},{0,1,0},{-1,0,0},
-                        {-.5,-.5,0.1},{0,.5,0.1},{.5,-.5,0.1}};
+                        {-.5,-1.5,0.1},{0,.5,-0.1},{.5,-.5,0.1}};
+    
     v4u08 Colors[] = {{255,0,0,0},{0,255,0,0},{0,0,255,0},
                       {0,255,255,0},{255,0,255,0},{255,255,0,0},
-                      {0,255,255,0},{255,0,255,0},{255,255,0,0}};
+                      {63,63,63,0},{127,127,127,0},{191,191,191,0}};
     
     // Rasterize(&Renderer, Vertices, Colors, 1);
-    Raytrace(&Renderer, V3r64(0, 0, 1), Vertices, Colors, 3);
+    Raytrace(&Renderer, V3r32(0, 0, 1), Vertices, Colors, 3);
     
     // SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Exiting boot services.\n\r");
     // u64 MapKey, MemoryMapSize;

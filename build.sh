@@ -4,8 +4,8 @@ SRCS="src/kernel/entry.c"
 TARGET="build/ThunderOS.efi"
 TARGET_DBG="build/ThunderOS_Debug.efi"
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Iuefi -Isrc"
-CFLAGS="$CFLAGS"
-CFLAGS_DBG="$CFLAGS -ggdb3"
+# CFLAGS="$CFLAGS -Ofast"
+CFLAGS="$CFLAGS -ggdb3"
 LFLAGS="-nostdlib -shared -Bsymbolic"
 SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc"
 SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str"
@@ -37,9 +37,10 @@ else
 fi
 
 for SRC in $SRCS; do
+    # gcc $CFLAGS -c -Wa,-adhln $SRC -o /dev/null > build/listing.s
     gcc $CFLAGS -E $SRC -o build/preprocessed.i
-    gcc $CFLAGS     -c $SRC -o ${SRC}.o
-    gcc $CFLAGS_DBG -c $SRC -o ${SRC}.o
+    gcc $CFLAGS -c $SRC -o ${SRC}.o
+    # gcc $CFLAGS_DBG -c $SRC -o ${SRC}.o
     OBJS="$OBJS ${SRC}.o"
 done
 
@@ -50,7 +51,8 @@ if [ $COMPILER = "GCC" ]; then
     objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 ${TARGET_DBG}.so $TARGET_DBG
 fi
 
-objdump -S --disassemble build/ThunderOS.efi > build/listing.asm
+# objdump -l -S -d --source-comment build/ThunderOS.efi > build/listing.asm
+objdump -l -S -d --source-comment build/ThunderOS_Debug.efi > build/listing.asm
 objdump --all-headers build/ThunderOS_Debug.efi > build/dump
 
 find src/ build/ -name "*.o"  | xargs rm 2>/dev/null

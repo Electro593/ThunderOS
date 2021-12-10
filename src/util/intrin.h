@@ -23,6 +23,27 @@
     #define VA_Start(Args, Last) __builtin_va_start(Args, Last)
     #define VA_End(Args) __builtin_va_end(Args)
     #define VA_Next(Args, Type) __builtin_va_arg(Args, Type)
+    
+    typedef r32 r128 __attribute__((vector_size(16)));
+    typedef s32 s128 __attribute__((vector_size(16)));
+    typedef s64 _s128_2x64 __attribute__((vector_size(16)));
+    typedef char _s128_16x8 __attribute__((vector_size(16)));
+    typedef u32 u128 __attribute__((vector_size(16)));
+    
+    #define R128_Set(_0, _1, _2, _3) ((r128){_0, _1, _2, _3})
+    #define R128_Set1(_0)            ((r128){_0, _0, _0, _0})
+    #define R128_ToU128(V)           (__builtin_convertvector(V, u128))
+    
+    #define S128_Set1(_0)          ((s128){_0, _0, _0, _0})
+    #define S128_Stream(P, V)      (__builtin_ia32_movntdq((_s128_2x64*)(P), (_s128_2x64)(V)))
+    #define S128_MaskMove(V, M, P) (__builtin_ia32_maskmovdqu((_s128_16x8)V, (_s128_16x8)M, (s08*)P))
+    #define S128_ToR128(V)         (__builtin_convertvector(V, r128))
+    
+    #define U128_Set(_0, _1, _2, _3) ((u128){_0, _1, _2, _3})
+    #define U128_Set1(_0)            ((u128){_0, _0, _0, _0})
+    #define U128_Stream(P, V)        S128_Stream(P, V)
+    #define U128_MaskMove(V, M, P)   S128_MaskMove(V, M, P)
+    
 #endif
 
 #endif
