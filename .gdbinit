@@ -16,9 +16,8 @@ end
 
 info files
 file
-add-symbol-file ./build/ThunderOS_Debug.efi 0x6444000 -s .data 0x6449000
+add-symbol-file ./build/ThunderOS_Debug.efi 0x6446000 -s .data 0x644A000
 set architecture i386:x86-64:intel
 set disassembly-flavor intel
 target remote :1234
 break EFI_Entry
-continue

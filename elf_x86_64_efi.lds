@@ -14,7 +14,7 @@ SECTIONS
   { 
     *(.eh_frame)
   }
-  . = ALIGN(4096);
+  . = ALIGN(8192);
   .text :
   {
    _text = .;

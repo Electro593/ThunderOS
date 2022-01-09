@@ -31,6 +31,7 @@
 #define LITERAL_CAST(EndType, StartType, ...) (*(EndType*)&(StartType){__VA_ARGS__})
 #define FORCE_CAST(Type, ...) (*(Type*)&(__VA_ARGS__))
 #define BIT_CLEAR(Bitstring, Index) ((Bitstring) & ~(1ULL << (Index)))
+#define INDEX_2D(X, Y, Width) ((X) + (Y)*(Width))
 
 #define global   static
 #define internal static

@@ -72,9 +72,10 @@ internal void Convert(vptr Out, type TypeOut, vptr In, type TypeIn);
 #include <kernel/efi.h>
 #include <util/intrin.h>
 #include <util/mem.c>
-#include <util/vector.c>
+// #include <util/vector.c>
 #include <util/str.c>
-#include <render/software.c>
+// #include <render/software.c>
+// #include <render/terminal.c>
 
 internal void
 Convert(vptr Out,
@@ -227,7 +228,8 @@ EFI_Entry(u64 LoadBase,
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Waiting for debugger...\n\r");
     
-    // asm ("int $3");
+    asm ("int $3");
+    #if 0
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Debugger Connected!\n\r");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Welcome to ThunderOS.\n\r");
@@ -280,15 +282,6 @@ EFI_Entry(u64 LoadBase,
     efi_graphics_output_blt_pixel Pixel = {0};
     GOP->Blt(GOP, &Pixel, EFI_GraphicsOutputBltOperation_VideoFill, 0, 0, 0, 0, 800, 600, 0);
     
-    // u32 Pitch = GOP->Mode->Info->PixelsPerScanLine;
-    // for(u32 Y = 50; Y < 50+16; ++Y)
-    // {
-    //     for(u32 X = 50; X < 50+16; ++X)
-    //     {
-    //         *((u32*)(GOP->Mode->FrameBufferBase + 4*GOP->Mode->Info->PixelsPerScanLine * Y + 4*X)) = 0x000000FF;
-    //     }
-    // }
-    
     software_renderer Renderer = {0};
     Renderer.Format = GOP->Mode->Info->PixelFormat == EFI_GraphicsPixelFormat_BlueGreenRedReserved8BitPerColor ? PixelFormat_BGRX_8 : PixelFormat_RGBX_8;
     Renderer.Size = (v2u32){GOP->Mode->Info->HorizontalResolution,
@@ -296,39 +289,30 @@ EFI_Entry(u64 LoadBase,
     Renderer.Framebuffer = (u08*)GOP->Mode->FrameBufferBase;
     Renderer.Pitch = 4 * GOP->Mode->Info->PixelsPerScanLine;
     Renderer.BackgroundColor = V4u08(0, 0, 0, 0);
-    // DrawLine(&Renderer, (v2r32){0.25f,0.5f}, (v2r32){0.75f,0.5f},
-    //                     (v4u08){255, 0, 0, 0}, (v4u08){255, 255, 255, 0});
-    // DrawLine(&Renderer, (v2r32){0.4f,0.55f}, (v2r32){0.9f,0.9f},
-    //                     (v4u08){255, 0, 255, 0}, (v4u08){0, 255, 0, 0});
+    Raytrace(&Renderer, (v3r32){0,0,0}, NULL, NULL, NULL, 0);
     
-    v3r32 Vertices[] = {{-1,-1,0},{0,1,0},{1,-1,0},
-                        {-1,1,0},{0,1,0},{-1,0,0},
-                        {-.5,-1.5,0.1},{0,.5,-0.1},{.5,-.5,0.1}};
     
-    v4u08 Colors[] = {{255,0,0,0},{0,255,0,0},{0,0,255,0},
-                      {0,255,255,0},{255,0,255,0},{255,255,0,0},
-                      {63,63,63,0},{127,127,127,0},{191,191,191,0}};
     
-    // Rasterize(&Renderer, Vertices, Colors, 1);
-    Raytrace(&Renderer, V3r32(0, 0, 1), Vertices, Colors, 3);
+    // terminal Terminal;
+    // Terminal.Pos = (v2u32){20, 20};
+    // Terminal.CellCount = (v2u32){20, 5};
+    // Terminal.CellSize = (v2u32){20, 40};
+    // Terminal.ForegroundColor = (v4u08){255,255,255,127};
+    // Terminal.BackgroundColor = (v3u08){0,0,0};
+    // Terminal.Text = "Hello, world!\n";
+    // DrawTerminal((v3u08*)Renderer.Framebuffer, Renderer.Size, Terminal);
     
-    // SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Exiting boot services.\n\r");
-    // u64 MapKey, MemoryMapSize;
-    // Status = SystemTable->BootServices->GetMemoryMap(&MemoryMapSize, NULL, &MapKey, NULL, NULL);
-    // ASSERT(Status == EFI_Status_BufferTooSmall);
-    // Status = SystemTable->BootServices->ExitBootServices(ImageHandle, MapKey);
-    // ASSERT(Status == EFI_Status_Success);
-    // SystemTable->ConsoleIn           = NULL;
-    // SystemTable->ConsoleInHandle     = NULL;
-    // SystemTable->ConsoleOut          = NULL;
-    // SystemTable->ConsoleOutHandle    = NULL;
-    // SystemTable->StandardErrorHandle = NULL;
-    // SystemTable->StandardError       = NULL;
-    // SystemTable->BootServices        = NULL;
+    
+    
+    
+    
+    
     
     b08 Wait = TRUE;
     while(Wait)
         asm ("pause");
+    
+    #endif
     
     return EFI_Status_Success;
 }

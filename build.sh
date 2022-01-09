@@ -4,7 +4,7 @@ SRCS="src/kernel/entry.c"
 TARGET="build/ThunderOS.efi"
 TARGET_DBG="build/ThunderOS_Debug.efi"
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Iuefi -Isrc"
-# CFLAGS="$CFLAGS -Ofast"
+# CFLAGS="$CFLAGS -Ofast -fno-tree-slp-vectorize"
 CFLAGS="$CFLAGS -ggdb3"
 LFLAGS="-nostdlib -shared -Bsymbolic"
 SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc"
@@ -56,7 +56,7 @@ objdump -l -S -d --source-comment build/ThunderOS_Debug.efi > build/listing.asm
 objdump --all-headers build/ThunderOS_Debug.efi > build/dump
 
 find src/ build/ -name "*.o"  | xargs rm 2>/dev/null
-find src/ build/ -name "*.so" | xargs rm 2>/dev/null
+# find src/ build/ -name "*.so" | xargs rm 2>/dev/null
 
 
 sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd

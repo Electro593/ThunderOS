@@ -115,6 +115,7 @@ internal void
 Raytrace(software_renderer *Renderer,
          v3r32 Eye,
          v3r32 *Vertices,
+         v3r32 *Normals,
          v4u08 *Colors,
          u32 TriangleCount)
 {
@@ -124,6 +125,7 @@ Raytrace(software_renderer *Renderer,
     
     typedef struct _raytracer_triangle {
         v4r32 C0, C1, C2;
+        v3r32 N0, N1, N2;
         v3r32 V0;
         v3r32 N;
         v3r32 NcV02;
@@ -146,6 +148,9 @@ Raytrace(software_renderer *Renderer,
         Ts[K].C0 = V4u08_ToV4r32(Colors[(K*3)+0]);
         Ts[K].C1 = V4u08_ToV4r32(Colors[(K*3)+1]);
         Ts[K].C2 = V4u08_ToV4r32(Colors[(K*3)+2]);
+        Ts[K].N0 = Normals[(K*3)+0];
+        v3r32 N1 = Normals[(K*3)+1];
+        v3r32 N2 = Normals[(K*3)+2];
         Ts[K].V0 = Vertices[(K*3)+0];
         v3r32 V1 = Vertices[(K*3)+1];
         v3r32 V2 = Vertices[(K*3)+2];
@@ -158,7 +163,7 @@ Raytrace(software_renderer *Renderer,
         Ts[K].tNumerator = V3r32_Dot(Ts[K].N, V3r32_Sub(Ts[K].V0, O));
     }
     
-    #if 1
+    #if 0
     
     // SIMD
     
@@ -286,6 +291,31 @@ Raytrace(software_renderer *Renderer,
             
             for(u32 K = 0; K < TriangleCount; ++K)
             {
+                #if 0
+                v3r32 V0 = Vertices[(K*3)+0];
+                v3r32 V1 = Vertices[(K*3)+1];
+                v3r32 V2 = Vertices[(K*3)+2];
+                v3r32 V01 = V3r32_Sub(V1, V0);
+                v3r32 V02 = V3r32_Sub(V2, V0);
+                v3r32 V0O = V3r32_Sub(O, V0);
+                
+                r32 D = V3r32_Dot(V3r32_Cross(V01, V02), R);
+                if(D < R32_EPSILON) continue;
+                r32 DR = 1 / D;
+                
+                r32 u = V3r32_Dot(V3r32_Cross(V01, V0O), R) * DR;
+                if(u < 0) continue;
+                
+                r32 v = V3r32_Dot(V3r32_Cross(V0O, V02), R) * DR;
+                if(v < 0) continue;
+                
+                r32 w = 1 - u - v;
+                if(w < 0) continue;
+                
+                r32 t = V3r32_Dot(V3r32_Cross(V01, V0O), V02) * DR;
+                
+                #else
+                
                 r32 NR = V3r32_Dot(Ts[K].N, R);
                 if(NR > R32_EPSILON)
                     continue; // Facing the wrong way
@@ -301,6 +331,8 @@ Raytrace(software_renderer *Renderer,
                 r32 w = 1 - u - v;
                 if(u < 0 || v < 0 || w < 0)
                     continue; // Outside of triangle
+                
+                #endif
                 
                 if(t < tN)
                 {
@@ -326,4 +358,23 @@ Raytrace(software_renderer *Renderer,
     }
     
     #endif
+}
+
+typedef struct window {
+    v2u32 Pos;
+    v2u32 Size;
+    
+    v2u32 BufferSize;
+    v4u08 *Framebuffer;
+} window;
+
+internal void
+DrawWindow(v4u08 *Framebuffer,
+           v2u32 BufferSize,
+           window Window)
+{
+    u32 Size = Window.Size.X * Window.Size.Y * sizeof(v4u08);
+    u32 WritePos = INDEX_2D(Window.Pos.X, Window.Pos.Y, BufferSize.Y);
+    
+    Mem_Cpy(Framebuffer + WritePos, Window.Framebuffer, Size);
 }
