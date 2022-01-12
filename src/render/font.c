@@ -82,7 +82,7 @@ Font data
   s32 Linegap
 Character data ...
   c08 Codepoint
-  s32 AdvanceWidth
+  s32 Advance
   s32 BearingX
   v2u32 Pos
   v2u32 Size
@@ -94,17 +94,20 @@ Character bitmaps ...
 */
 
 typedef struct font_header {
+    v2u32 BitmapSize;
     s32 Ascent;
     s32 Descent;
     s32 Linegap;
+    s32 MaxAdvanceX;
 } font_header;
 
 typedef struct font_character {
     c08 Codepoint;
-    s32 AdvanceWidth;
-    s32 LeftSideBearing;
+    s32 Advance;
+    s32 BearingX;
     u64 KerningFileOffset;
     u64 BitmapFileOffset;
+    v2s32 Pos;
     v2u32 Size;
 } font_character;
 
@@ -138,6 +141,9 @@ CreateFontFile(vptr FontData,
     font_character *Character = (font_character*)(Header+1);
     u08 *Bitmap = (u08*)(Character+(127-32));
     
+    Header->BitmapSize = (v2u32){BitmapWidth, BitmapHeight};
+    Header->MaxAdvanceX = CellWidth;
+    
     s32 Ascent, Descent, Linegap;
     stbtt_GetFontVMetrics(&Font, &Ascent, &Descent, &Linegap);
     Header->Ascent  = (s32)((r32)Ascent  * Scale);
@@ -152,10 +158,10 @@ CreateFontFile(vptr FontData,
         u32 GlyphIndex = stbtt_FindGlyphIndex(&Font, Codepoint);
         if(GlyphIndex == 0) continue;
         
-        s32 AdvanceWidth, LeftSideBearing;
-        stbtt_GetGlyphHMetrics(&Font, GlyphIndex, &AdvanceWidth, &LeftSideBearing);
-        Character->AdvanceWidth    = (s32)((r32)AdvanceWidth    * Scale);
-        Character->LeftSideBearing = (s32)((r32)LeftSideBearing * Scale);
+        s32 Advance, BearingX;
+        stbtt_GetGlyphHMetrics(&Font, GlyphIndex, &Advance, &BearingX);
+        Character->Advance  = (s32)((r32)Advance  * Scale);
+        Character->BearingX = (s32)((r32)BearingX * Scale);
         
         // stbtt_GetGlyphBitmapBox(&Font, GlyphIndex, Scale, Scale, &SX, &SY, &EX, &EY);
         // u32 GlyphWidth = EX - SX;
@@ -163,26 +169,28 @@ CreateFontFile(vptr FontData,
         
         if(stbtt_IsGlyphEmpty(&Font, GlyphIndex)) {
             Character->Size = (v2u32){0};
+            Character->Pos = (v2s32){0};
             Character->BitmapFileOffset = 0;
         } else {
             stbtt_GetGlyphBitmapBox(&Font, GlyphIndex, Scale, Scale, &SX, &SY, &EX, &EY);
+            Character->Pos = (v2s32){SX, -EY};
             Character->Size = (v2u32){EX - SX, EY - SY};
             
             u64 BitmapOffset = INDEX_2D((Cell%8)*CellWidth, (Cell/8)*CellHeight, BitmapWidth);
             u08 *CharBitmap = Bitmap + BitmapOffset;
             Character->BitmapFileOffset = BitmapFileOffset + BitmapOffset;
-            // stbtt_MakeGlyphBitmap(&Font, CharBitmap, CellWidth, CellHeight, BitmapWidth, Scale, Scale, GlyphIndex);
+            stbtt_MakeGlyphBitmap(&Font, CharBitmap, CellWidth, CellHeight, BitmapWidth, Scale, Scale, GlyphIndex);
             
             
-            u08 *Temp = Context.Allocate(CellWidth * CellHeight);
-            stbtt_MakeGlyphBitmap(&Font, Temp, CellWidth, CellHeight, CellWidth, Scale, Scale, GlyphIndex);
-            for(u32 i = 0; i < CellHeight; ++i) {
-                u08 *Cursor = CharBitmap;
-                for(u32 j = 0; j < CellWidth; ++j) {
-                    *Cursor++ = *Temp++;
-                }
-                CharBitmap += BitmapWidth;
-            }
+            // u08 *Temp = Context.Allocate(CellWidth * CellHeight);
+            // stbtt_MakeGlyphBitmap(&Font, Temp, CellWidth, CellHeight, CellWidth, Scale, Scale, GlyphIndex);
+            // for(u32 i = 0; i < CellHeight; ++i) {
+            //     u08 *Cursor = CharBitmap;
+            //     for(u32 j = 0; j < CellWidth; ++j) {
+            //         *Cursor++ = *Temp++;
+            //     }
+            //     CharBitmap += BitmapWidth;
+            // }
             
             
             Cell++;
@@ -196,10 +204,11 @@ CreateFontFile(vptr FontData,
     BitmapHeaderOut->Signature[0] = 'B';
     BitmapHeaderOut->Signature[1] = 'M';
     BitmapHeaderOut->FileSize = sizeof(bitmap_header) + BitmapSize;
+    BitmapHeaderOut->Reserved = 0;
     BitmapHeaderOut->DataOffset = sizeof(bitmap_header);
     BitmapHeaderOut->Size = 40;
     BitmapHeaderOut->Width = BitmapWidth;
-    BitmapHeaderOut->Height = BitmapHeight;
+    BitmapHeaderOut->Height = -BitmapHeight;
     BitmapHeaderOut->Planes = 1;
     BitmapHeaderOut->BitsPerPixel = 8;
     BitmapHeaderOut->Compression = 0;

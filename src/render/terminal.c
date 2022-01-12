@@ -8,83 +8,112 @@
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 typedef struct terminal {
-    v2u32 Pos;
+    u64 MaxLines;
+    u64 LineNum;
+    c08 **Lines;
     
-    v2u32 CellSize;
-    
-    v3u08 BackgroundColor;
-    v4u08 ForegroundColor;
-    
+    u64 MaxChars;
+    u64 CharCount;
     c08 *Text;
 } terminal;
 
 internal void
+WriteToTerminal(terminal *Terminal,
+                c08 *TextToWrite,
+                u32 CharCount)
+{
+    if(Terminal->CharCount + CharCount >= Terminal->MaxChars) {
+        ASSERT(FALSE);
+    }
+    
+    c08 *C = TextToWrite;
+    c08 *Buf = Terminal->Text;
+    while(*C)
+    {
+        if(*C == '\n') {
+            if(Terminal->LineNum + 1 >= Terminal->MaxLines) {
+                ASSERT(FALSE);
+            }
+            
+            c08 **Line = Terminal->Lines + Terminal->LineNum;
+            *Line = Buf + 1;
+            Terminal->LineNum++;
+        }
+        
+        *Buf++ = *C++;
+    }
+    
+    Terminal->CharCount += CharCount;
+}
+
+internal void
 DrawTerminal(u32 *Framebuffer,
              v2u32 BufferSize,
-             terminal Terminal,
-             vptr *Bitmaps)
+             terminal *Terminal,
+             c08 *Text,
+             font_header *Font)
 {
-    c08 *C = Terminal.Text;
-    r32 Opacity = Terminal.ForegroundColor.W / 255.0f;
-    v3u08 BackgroundColor = V3u08_Mul_VS(Terminal.BackgroundColor, 1 - Opacity);
-    v3u08 ForegroundColor = V3u08_Mul_VS(FORCE_CAST(v3u08, Terminal.ForegroundColor), Opacity);
-    v3u08 Color = V3u08_Add(BackgroundColor, ForegroundColor);
+    c08 *C = Text;
     
-    v2u32 CellCount = {BufferSize.X / Terminal.CellSize.X,
-                       BufferSize.Y / Terminal.CellSize.Y};
+    font_character *Characters = (font_character*)(Font+1);
     
-    u32 Col = Terminal.Pos.X;
-    u32 Row = Terminal.Pos.Y;
+    s32 AdvanceY = Font->Ascent - Font->Descent + Font->Linegap;
+    
+    // u32 LinesToShow = BufferSize.X / AdvanceY;
+    // if(Terminal->LineNum < LinesToShow) LinesToShow = Terminal->LineNum;
+    // c08 *C = Terminal->Lines[Terminal->LineNum - LinesToShow];
+    
+    v2u32 Pos = {0, Font->Ascent + Terminal->LineNum*AdvanceY};
     while(*C) {
-        if(Row >= CellCount.Y) break;
-        
         if(*C == '\n') {
-            Col = 0;
-            Row++;
+            Pos.X = 0;
+            Pos.Y += AdvanceY;
             C++;
             continue;
         }
         
         if(*C == '\t') {
-            Col += 4;
+            Pos.X += 4 * Characters[' ' - ' '].Advance;
             C++;
             continue;
         }
         
         if(*C == ' ') {
-            Col++;
+            Pos.X += Characters[' ' - ' '].Advance;
             C++;
             continue;
         }
         
-        if(Col >= CellCount.X) {
-            Col = 0;
-            Row++;
+        if(Pos.X >= BufferSize.X) {
+            Pos.X = 0;
+            Pos.Y += AdvanceY;
+        }
+        
+        if(Pos.Y - Font->Descent >= BufferSize.Y) {
+            break;
         }
         
         v4u08 CurrColor;
-        bitmap_header *Header = (bitmap_header*)(Bitmaps[*C]);
+        font_character Char = Characters[*C - ' '];
+        u08 *Bitmap = (u08*)Font + Char.BitmapFileOffset;
         
-        for(s32 Y = Terminal.CellSize.Y; Y > Terminal.CellSize.Y - Header->Height; Y--)
+        for(s32 Y = 0; Y < Char.Size.Y; Y++)
         {
-            for(u32 X = 0; X < Header->Width; X++)
+            for(s32 X = 0; X < Char.Size.X; X++)
             {
-                u32 PixelIndex = INDEX_2D(X+Col*Terminal.CellSize.X, Y+Row*Terminal.CellSize.Y, BufferSize.X);
+                u32 _X = Pos.X + Char.BearingX + X;
+                u32 _Y = Pos.Y - Char.Pos.Y - Char.Size.Y + Y;
+                u32 PixelIndex = INDEX_2D(_X, _Y, BufferSize.X);
                 u32 *Pixel = Framebuffer + PixelIndex;
                 
-                // v4u08 CurrColor = {64*((*C>>0)&3) + 64*((*C>>6)&3),
-                //                    64*((*C>>2)&3) + 64*((*C>>6)&3),
-                //                    64*((*C>>4)&3) + 64*((*C>>6)&3),
-                //                    0};
-                
-                v4u08 *Pixels = (v4u08*)(Header+1);
-                CurrColor = Pixels[INDEX_2D(X, Terminal.CellSize.Y - Y, Header->Width)];
+                u08 Grayscale = Bitmap[INDEX_2D(X, Y, Font->BitmapSize.X)];
+                CurrColor = (v4u08){Grayscale, Grayscale, Grayscale, 0};
                 
                 *Pixel = MAKE_COLOR(PixelFormat_BGRX_8, CurrColor);
             }
         }
         
-        Col++;
+        Pos.X += Char.Advance;
         C++;
     }
 }

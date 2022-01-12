@@ -335,21 +335,11 @@ EFI_Entry(u64 LoadBase,
     Status = Volume->Open(Volume, &FileHandle, u"\\assets\\cour.font", EFI_FileMode_Create|EFI_FileMode_Read|EFI_FileMode_Write, 0);
     Status = FileHandle->Write(FileHandle, &FontFileSize, FontFile);
     Status = FileHandle->Close(FileHandle);
-    u64 FontBitmapSize = FontFileSize - sizeof(font_header) - (127-32)*sizeof(font_character) + sizeof(bitmap_header);
-    vptr FontBitmap = (u08*)FontFile + FontFileSize - FontBitmapSize;
-    bitmap_header *BitmapHeader = (bitmap_header*)FontBitmap;
-    *BitmapHeader = BitmapHeaderOut;
-    Status = Volume->Open(Volume, &FileHandle, L"\\assets\\cour.bmp", EFI_FileMode_Create|EFI_FileMode_Read|EFI_FileMode_Write, 0);
-    Status = FileHandle->Write(FileHandle, &FontBitmapSize, FontBitmap);
-    Status = FileHandle->Close(FileHandle);
     
-    // terminal Terminal;
-    // Terminal.Pos = (v2u32){0, 2};
-    // Terminal.CellSize = (v2u32){25, 40};
-    // Terminal.ForegroundColor = (v4u08){255,255,255,127};
-    // Terminal.BackgroundColor = (v3u08){0,0,0};
-    // Terminal.Text = "Hello, world!\n\t    Pleasant day it is outside, isn't it?";
-    // DrawTerminal((u32*)Renderer.Framebuffer, Renderer.Size, Terminal, Bitmaps);
+    terminal Terminal;
+    Terminal.LineNum = 2;
+    c08 *Text = "Hello, world!\n\t    Pleasant day it is outside, isn't it?\n\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 1234567890`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?\nNewline: [\n]\nTab: [\t]";
+    DrawTerminal((u32*)Renderer.Framebuffer, Renderer.Size, &Terminal, Text, (font_header*)FontFile);
     
     
     
