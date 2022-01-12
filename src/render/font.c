@@ -99,6 +99,7 @@ typedef struct font_header {
     s32 Descent;
     s32 Linegap;
     s32 MaxAdvanceX;
+    s32 AdvanceY;
 } font_header;
 
 typedef struct font_character {
@@ -141,14 +142,15 @@ CreateFontFile(vptr FontData,
     font_character *Character = (font_character*)(Header+1);
     u08 *Bitmap = (u08*)(Character+(127-32));
     
-    Header->BitmapSize = (v2u32){BitmapWidth, BitmapHeight};
-    Header->MaxAdvanceX = CellWidth;
-    
     s32 Ascent, Descent, Linegap;
     stbtt_GetFontVMetrics(&Font, &Ascent, &Descent, &Linegap);
     Header->Ascent  = (s32)((r32)Ascent  * Scale);
     Header->Descent = (s32)((r32)Descent * Scale);
     Header->Linegap = (s32)((r32)Linegap * Scale);
+    
+    Header->BitmapSize = (v2u32){BitmapWidth, BitmapHeight};
+    Header->MaxAdvanceX = CellWidth;
+    Header->AdvanceY = Header->Ascent - Header->Descent + Header->Linegap;
     
     u32 Cell = 0;
     for(u32 Codepoint = 32; Codepoint < 127; ++Codepoint)

@@ -336,11 +336,19 @@ EFI_Entry(u64 LoadBase,
     Status = FileHandle->Write(FileHandle, &FontFileSize, FontFile);
     Status = FileHandle->Close(FileHandle);
     
-    terminal Terminal;
-    Terminal.LineNum = 2;
-    c08 *Text = "Hello, world!\n\t    Pleasant day it is outside, isn't it?\n\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 1234567890`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?\nNewline: [\n]\nTab: [\t]";
-    DrawTerminal((u32*)Renderer.Framebuffer, Renderer.Size, &Terminal, Text, (font_header*)FontFile);
-    
+    c08 Text[] = "Hello, world!\n\t    Pleasant day it is outside, isn't it?\n\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 1234567890`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?\nNewline: [\n]\nTab: [\t]";
+    terminal Terminal = InitTerminal(100, 2000, FontFile, Renderer.Size);
+    WriteToTerminal(&Terminal, Text, sizeof(Text));
+    DrawTerminal((u32*)Renderer.Framebuffer, &Terminal);
+    for(u32 Line = 0; Line < 30; Line++) {
+        GOP->Blt(GOP, &Pixel, EFI_GraphicsOutputBltOperation_VideoFill, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
+        
+        c08 NewText[] = "\nLine --";
+        NewText[6] = (Line / 10) + '0';
+        NewText[7] = (Line % 10) + '0';
+        WriteToTerminal(&Terminal, NewText, sizeof(NewText));
+        DrawTerminal((u32*)Renderer.Framebuffer, &Terminal);
+    }
     
     
     b08 Wait = TRUE;
