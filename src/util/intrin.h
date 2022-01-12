@@ -32,6 +32,7 @@
     
     #define R128_Set(_0, _1, _2, _3) ((r128){_0, _1, _2, _3})
     #define R128_Set1(_0)            ((r128){_0, _0, _0, _0})
+    #define R128_Sqrt_4(V)           (__builtin_ia32_sqrtps(V))
     #define R128_ToU128(V)           (__builtin_convertvector(V, u128))
     
     #define S128_Set1(_0)          ((s128){_0, _0, _0, _0})
@@ -43,7 +44,6 @@
     #define U128_Set1(_0)            ((u128){_0, _0, _0, _0})
     #define U128_Stream(P, V)        S128_Stream(P, V)
     #define U128_MaskMove(V, M, P)   S128_MaskMove(V, M, P)
-    
 #endif
 
 #endif

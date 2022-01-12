@@ -7,8 +7,8 @@ CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -
 # CFLAGS="$CFLAGS -Ofast -fno-tree-slp-vectorize"
 CFLAGS="$CFLAGS -ggdb3"
 LFLAGS="-nostdlib -shared -Bsymbolic"
-SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc"
-SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str"
+SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .reloc" #  -j .rel.* -j .rela.*
+SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str -j .debug_line_str"
 
 if [ ! -d build ]; then
     mkdir build
@@ -44,23 +44,27 @@ for SRC in $SRCS; do
     OBJS="$OBJS ${SRC}.o"
 done
 
-ld  $LFLAGS $OBJS $LIBS
-ld  $LFLAGS $OBJS $LIBS_DBG
+ld $LFLAGS $OBJS $LIBS
+ld $LFLAGS $OBJS $LIBS_DBG
 if [ $COMPILER = "GCC" ]; then
+    # objcopy --target $EFIARCH --subsystem=10 --strip-debug ${TARGET_DBG}.so $TARGET
+    objcopy --target $EFIARCH --subsystem=10 --only-keep-debug ${TARGET_DBG}.so $TARGET_DBG
     objcopy $SECTIONS --target $EFIARCH --subsystem=10 ${TARGET}.so $TARGET
-    objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 ${TARGET_DBG}.so $TARGET_DBG
+    # objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 ${TARGET_DBG}.so $TARGET_DBG
 fi
 
-# objdump -l -S -d --source-comment build/ThunderOS.efi > build/listing.asm
-objdump -l -S -d --source-comment build/ThunderOS_Debug.efi > build/listing.asm
+objdump -l -S -d --source-comment ${TARGET_DBG}.so > build/listing.asm
+# objdump -l -S -d --source-comment build/ThunderOS_Debug.efi > build/listing.asm
+# objdump --all-headers build/ThunderOS.efi > build/dump
 objdump --all-headers build/ThunderOS_Debug.efi > build/dump
 
 find src/ build/ -name "*.o"  | xargs rm 2>/dev/null
-# find src/ build/ -name "*.so" | xargs rm 2>/dev/null
+find src/ build/ -name "*.so" | xargs rm 2>/dev/null
 
 
 sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd
 sudo mount -t auto -o rw /dev/nbd0p1 /mnt
+# sudo cp -r assets /mnt/
 sudo cp build/ThunderOS.efi /mnt/EFI/BOOT/BOOTX64.efi
 sudo umount /dev/nbd0p1
 sudo qemu-nbd -d /dev/nbd0

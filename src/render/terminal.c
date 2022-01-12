@@ -11,7 +11,6 @@ typedef struct terminal {
     v2u32 Pos;
     
     v2u32 CellSize;
-    v2u32 CellCount;
     
     v3u08 BackgroundColor;
     v4u08 ForegroundColor;
@@ -20,9 +19,10 @@ typedef struct terminal {
 } terminal;
 
 internal void
-DrawTerminal(v3u08 *Framebuffer,
+DrawTerminal(u32 *Framebuffer,
              v2u32 BufferSize,
-             terminal Terminal)
+             terminal Terminal,
+             vptr *Bitmaps)
 {
     c08 *C = Terminal.Text;
     r32 Opacity = Terminal.ForegroundColor.W / 255.0f;
@@ -30,32 +30,61 @@ DrawTerminal(v3u08 *Framebuffer,
     v3u08 ForegroundColor = V3u08_Mul_VS(FORCE_CAST(v3u08, Terminal.ForegroundColor), Opacity);
     v3u08 Color = V3u08_Add(BackgroundColor, ForegroundColor);
     
-    u32 Y = Terminal.Pos.Y;
-    for(u32 Row = 0; Row < Terminal.CellCount.Y; Row++)
-    {
-        if(Y >= BufferSize.Y) break;
+    v2u32 CellCount = {BufferSize.X / Terminal.CellSize.X,
+                       BufferSize.Y / Terminal.CellSize.Y};
+    
+    u32 Col = Terminal.Pos.X;
+    u32 Row = Terminal.Pos.Y;
+    while(*C) {
+        if(Row >= CellCount.Y) break;
         
-        u32 X = Terminal.Pos.X;
-        for(u32 Col = 0; Col < Terminal.CellCount.X; Col++)
-        {
-            if(X >= BufferSize.X) break;
-            
-            for(u32 _Y = Y; _Y < Y + Terminal.CellSize.Y; ++_Y) {
-                for(u32 _X = X; _X < X + Terminal.CellSize.X; ++_X) {
-                    v3u08 *Pixel = Framebuffer + INDEX_2D(_X, _Y, BufferSize.X);
-                    
-                    v3u08 CurrColor = {64 * (*C>>0)&3 + 64*(*C>>6)&3,
-                                       64 * (*C>>2)&3 + 64*(*C>>6)&3,
-                                       64 * (*C>>4)&3 + 64*(*C>>6)&3};
-                    
-                    *Pixel = CurrColor;
-                }
-            }
-            
-            X += Terminal.CellSize.X;
+        if(*C == '\n') {
+            Col = 0;
+            Row++;
             C++;
+            continue;
         }
         
-        Y += Terminal.CellSize.Y;
+        if(*C == '\t') {
+            Col += 4;
+            C++;
+            continue;
+        }
+        
+        if(*C == ' ') {
+            Col++;
+            C++;
+            continue;
+        }
+        
+        if(Col >= CellCount.X) {
+            Col = 0;
+            Row++;
+        }
+        
+        v4u08 CurrColor;
+        bitmap_header *Header = (bitmap_header*)(Bitmaps[*C]);
+        
+        for(s32 Y = Terminal.CellSize.Y; Y > Terminal.CellSize.Y - Header->Height; Y--)
+        {
+            for(u32 X = 0; X < Header->Width; X++)
+            {
+                u32 PixelIndex = INDEX_2D(X+Col*Terminal.CellSize.X, Y+Row*Terminal.CellSize.Y, BufferSize.X);
+                u32 *Pixel = Framebuffer + PixelIndex;
+                
+                // v4u08 CurrColor = {64*((*C>>0)&3) + 64*((*C>>6)&3),
+                //                    64*((*C>>2)&3) + 64*((*C>>6)&3),
+                //                    64*((*C>>4)&3) + 64*((*C>>6)&3),
+                //                    0};
+                
+                v4u08 *Pixels = (v4u08*)(Header+1);
+                CurrColor = Pixels[INDEX_2D(X, Terminal.CellSize.Y - Y, Header->Width)];
+                
+                *Pixel = MAKE_COLOR(PixelFormat_BGRX_8, CurrColor);
+            }
+        }
+        
+        Col++;
+        C++;
     }
 }

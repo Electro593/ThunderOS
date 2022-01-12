@@ -69,13 +69,32 @@ asm (
 
 internal void Convert(vptr Out, type TypeOut, vptr In, type TypeIn);
 
+typedef struct __attribute__((packed)) bitmap_header {
+    c08 Signature[2];
+    u32 FileSize;
+    u32 Reserved;
+    u32 DataOffset;
+    u32 Size;
+    u32 Width;
+    u32 Height;
+    u16 Planes;
+    u16 BitsPerPixel;
+    u32 Compression;
+    u32 ImageSize;
+    u32 XPixelsPerM;
+    u32 YPixelsPerM;
+    u32 ColorsUsed;
+    u32 ImportantColors;
+} bitmap_header;
+
 #include <kernel/efi.h>
 #include <util/intrin.h>
 #include <util/mem.c>
-// #include <util/vector.c>
+#include <util/vector.c>
 #include <util/str.c>
-// #include <render/software.c>
-// #include <render/terminal.c>
+#include <render/font.c>
+#include <render/software.c>
+#include <render/terminal.c>
 
 internal void
 Convert(vptr Out,
@@ -228,8 +247,7 @@ EFI_Entry(u64 LoadBase,
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Waiting for debugger...\n\r");
     
-    asm ("int $3");
-    #if 0
+    // asm ("int $3");
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Debugger Connected!\n\r");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Welcome to ThunderOS.\n\r");
@@ -238,7 +256,7 @@ EFI_Entry(u64 LoadBase,
     Context.Allocate = Stack_Allocate;
     
     vptr MemBase;
-    u64 StackSize = 1 * 1024 * 1024;
+    u64 StackSize = 4 * 1024 * 1024;
     Status = SystemTable->BootServices->AllocatePool(LoadedImage->ImageDataType, StackSize, &MemBase);
     ASSERT(Status == EFI_Status_Success);
     u08 *MemCursor = MemBase;
@@ -291,20 +309,47 @@ EFI_Entry(u64 LoadBase,
     Renderer.BackgroundColor = V4u08(0, 0, 0, 0);
     Raytrace(&Renderer, (v3r32){0,0,0}, NULL, NULL, NULL, 0);
     
+    efi_simple_file_system_protocol *SFSP = NULL;
+    SystemTable->BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID, (vptr)&SFSP);
+    efi_file_protocol *Volume = NULL;
+    SFSP->OpenVolume(SFSP, &Volume);
     
+    vptr TTFData;
+    efi_file_protocol *FileHandle;
+    u64 BufferSize;
+    efi_file_info *FileInfo = Context.Allocate(sizeof(efi_file_info));
+    Status = Volume->Open(Volume, &FileHandle, L"\\assets\\cour.ttf", EFI_FileMode_Read, 0);
+    Status = FileHandle->GetInfo(FileHandle, &EFI_FILE_INFO_ID, &BufferSize, FileInfo);
+    if(Status == EFI_Status_BufferTooSmall) {
+        FileInfo = Context.Allocate(BufferSize);
+        Status = FileHandle->GetInfo(FileHandle, &EFI_FILE_INFO_ID, &BufferSize, FileInfo);
+    }
+    TTFData = Context.Allocate(FileInfo->FileSize);
+    Status = FileHandle->Read(FileHandle, &FileInfo->FileSize, TTFData);
+    Status = FileHandle->Close(FileHandle);
+    
+    u64 FontFileSize;
+    vptr FontFile;
+    bitmap_header BitmapHeaderOut;
+    CreateFontFile(TTFData, &FontFile, &FontFileSize, 32, &BitmapHeaderOut);
+    Status = Volume->Open(Volume, &FileHandle, u"\\assets\\cour.font", EFI_FileMode_Create|EFI_FileMode_Read|EFI_FileMode_Write, 0);
+    Status = FileHandle->Write(FileHandle, &FontFileSize, FontFile);
+    Status = FileHandle->Close(FileHandle);
+    u64 FontBitmapSize = FontFileSize - sizeof(font_header) - (127-32)*sizeof(font_character) + sizeof(bitmap_header);
+    vptr FontBitmap = (u08*)FontFile + FontFileSize - FontBitmapSize;
+    bitmap_header *BitmapHeader = (bitmap_header*)FontBitmap;
+    *BitmapHeader = BitmapHeaderOut;
+    Status = Volume->Open(Volume, &FileHandle, L"\\assets\\cour.bmp", EFI_FileMode_Create|EFI_FileMode_Read|EFI_FileMode_Write, 0);
+    Status = FileHandle->Write(FileHandle, &FontBitmapSize, FontBitmap);
+    Status = FileHandle->Close(FileHandle);
     
     // terminal Terminal;
-    // Terminal.Pos = (v2u32){20, 20};
-    // Terminal.CellCount = (v2u32){20, 5};
-    // Terminal.CellSize = (v2u32){20, 40};
+    // Terminal.Pos = (v2u32){0, 2};
+    // Terminal.CellSize = (v2u32){25, 40};
     // Terminal.ForegroundColor = (v4u08){255,255,255,127};
     // Terminal.BackgroundColor = (v3u08){0,0,0};
-    // Terminal.Text = "Hello, world!\n";
-    // DrawTerminal((v3u08*)Renderer.Framebuffer, Renderer.Size, Terminal);
-    
-    
-    
-    
+    // Terminal.Text = "Hello, world!\n\t    Pleasant day it is outside, isn't it?";
+    // DrawTerminal((u32*)Renderer.Framebuffer, Renderer.Size, Terminal, Bitmaps);
     
     
     
@@ -312,7 +357,6 @@ EFI_Entry(u64 LoadBase,
     while(Wait)
         asm ("pause");
     
-    #endif
     
     return EFI_Status_Success;
 }
