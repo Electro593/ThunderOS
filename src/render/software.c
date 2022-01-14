@@ -16,7 +16,7 @@ typedef enum pixel_format {
 #define MAKE_COLOR(F, V) (F == PixelFormat_RGBX_8 ? _MAKE_COLOR(0, V.Z, V.Y, V.X) : _MAKE_COLOR(0, V.X, V.Y, V.Z))
 
 typedef struct software_renderer {
-    u08 *Framebuffer;
+    u32 *Framebuffer;
     
     v2u32 Size;
     u32 Pitch;

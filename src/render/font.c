@@ -27,7 +27,7 @@ internal r32
 R32_Sqrt(r32 N)
 {
     r32 Result;
-    Result = R128_Sqrt_4(R128_Set(N,0,0,0))[0];
+    Result = R128_Sqrt_4(R128_Set_4x32(N,0,0,0))[0];
     return Result;
 }
 

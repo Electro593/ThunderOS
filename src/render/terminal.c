@@ -14,11 +14,11 @@ typedef struct terminal {
     
     u64 MaxChars;
     u64 CharCount;
-    c08 *Text;
+    c08 *Cursor;
     
     font_header *Font;
     v2u32 BufferSize;
-    v2u32 Pos;
+    u32 PosX;
 } terminal;
 
 internal terminal
@@ -31,13 +31,14 @@ InitTerminal(u32 MaxLines,
     Terminal.MaxChars = MaxChars;
     Terminal.MaxLines = MaxLines;
     Terminal.CharCount = 0;
-    Terminal.LineNum = 0;
-    Terminal.Text = Context.Allocate(MaxChars * sizeof(c08));
-    Terminal.Lines = Context.Allocate(MaxLines * sizeof(c08*));
-    Terminal.Text[0] = 0;
-    Terminal.Lines[0] = Terminal.Text;
+    Terminal.LineNum   = 1;
+    Terminal.Cursor = Context.Allocate(MaxChars * sizeof(c08));
+    Terminal.Lines  = Context.Allocate(MaxLines * sizeof(c08*));
+    Terminal.Cursor[0] = 0;
+    Terminal.Lines[0]  = Terminal.Cursor;
     Terminal.Font = Font;
     Terminal.BufferSize = BufferSize;
+    Terminal.PosX = 0;
     return Terminal;
 }
 
@@ -46,16 +47,21 @@ WriteToTerminal(terminal *Terminal,
                 c08 *TextToWrite,
                 u32 CharCount)
 {
-    v2u32 Pos = Terminal->Pos;
+    if(CharCount == 0) {
+        c08 *C = TextToWrite;
+        while(*C++) CharCount++;
+    }
+    
+    u32 PosX = Terminal->PosX;
     font_header *Font = Terminal->Font;
     font_character *Characters = (font_character*)(Terminal->Font+1);
     
-    u32 NewCharCount = Terminal->CharCount + CharCount - 1;
+    u32 NewCharCount = Terminal->CharCount + CharCount;
     ASSERT(NewCharCount < Terminal->MaxChars);
     
     font_character Char;
     c08 *C = TextToWrite;
-    c08 *Buf = Terminal->Text + Terminal->CharCount;
+    c08 *Buf = Terminal->Cursor;
     while(*C)
     {
         b08 AddDifference = FALSE;
@@ -70,25 +76,26 @@ WriteToTerminal(terminal *Terminal,
             AddDifference = TRUE;
         }
         
-        if(Pos.X + ToAdvance >= Terminal->BufferSize.X) {
+        if(PosX + ToAdvance >= Terminal->BufferSize.X) {
             if(AddDifference) {
-                Pos.X = ToAdvance - Terminal->BufferSize.X;
+                PosX = PosX + ToAdvance - Terminal->BufferSize.X;
             } else {
-                Pos.X = 0;
+                PosX = 0;
             }
             
-            ASSERT(Terminal->LineNum+1 < Terminal->MaxLines);
-            Terminal->Lines[++Terminal->LineNum] = Buf;
+            ASSERT(Terminal->LineNum < Terminal->MaxLines);
+            Terminal->Lines[Terminal->LineNum++] = Buf;
         } else {
-            Pos.X += ToAdvance;
+            PosX += ToAdvance;
         }
         
         *Buf++ = *C++;
     }
     
     *Buf = 0;
+    Terminal->Cursor = Buf;
     Terminal->CharCount = NewCharCount;
-    Terminal->Pos = Pos;
+    Terminal->PosX = PosX;
 }
 
 internal void
@@ -102,77 +109,61 @@ DrawTerminal(u32 *Framebuffer,
     u32 LinesToShow = BufferSize.Y / Font->AdvanceY;
     if(Terminal->LineNum < LinesToShow) LinesToShow = Terminal->LineNum;
     
-    c08 **Line = Terminal->Lines[Terminal->LineNum - LinesToShow];
+    v2u32 Pos = (v2u32){0, Font->Ascent};
+    c08 **Line = Terminal->Lines + Terminal->LineNum - LinesToShow;
     for(u32 LineIndex = 0; LineIndex < LinesToShow; LineIndex++)
     {
+        Pos.X = 0;
         c08 *C = Line[LineIndex];
         c08 *NextLine;
         if(LineIndex == LinesToShow - 1) {
-            NextLine = Terminal->Text;
+            NextLine = Terminal->Cursor;
         } else {
             NextLine = Line[LineIndex+1];
         }
         
         while(C < NextLine)
         {
-            
-            
-            C++;
-        }
-    }
-    
-    c08 *C = Terminal->Lines[Terminal->LineNum - LinesToShow];
-    
-    v2u32 Pos = {0, Font->Ascent};
-    while(*C) {
-        if(*C == '\n') {
-            // Already been processed, so continue
-            C++;
-            continue;
-        }
-        
-        if(*C == '\t') {
-            Pos.X += 4 * Characters[' ' - ' '].Advance;
-            C++;
-            continue;
-        }
-        
-        if(*C == ' ') {
-            Pos.X += Characters[' ' - ' '].Advance;
-            C++;
-            continue;
-        }
-        
-        if(Pos.X >= BufferSize.X) {
-            Pos.X = 0;
-            Pos.Y += Font->AdvanceY;
-        }
-        
-        if(Pos.Y - Font->Descent >= BufferSize.Y) {
-            break;
-        }
-        
-        v4u08 CurrColor;
-        font_character Char = Characters[*C - ' '];
-        u08 *Bitmap = (u08*)Font + Char.BitmapFileOffset;
-        
-        for(s32 Y = 0; Y < Char.Size.Y; Y++)
-        {
-            for(s32 X = 0; X < Char.Size.X; X++)
-            {
-                u32 _X = Pos.X + Char.BearingX + X;
-                u32 _Y = Pos.Y - Char.Pos.Y - Char.Size.Y + Y;
-                u32 PixelIndex = INDEX_2D(_X, _Y, BufferSize.X);
-                u32 *Pixel = Framebuffer + PixelIndex;
-                
-                u08 Grayscale = Bitmap[INDEX_2D(X, Y, Font->BitmapSize.X)];
-                CurrColor = (v4u08){Grayscale, Grayscale, Grayscale, 0};
-                
-                *Pixel = MAKE_COLOR(PixelFormat_BGRX_8, CurrColor);
+            if(*C == '\n') {
+                C++;
+                continue;
             }
+            
+            if(*C == '\t') {
+                Pos.X += 4 * Characters[' ' - ' '].Advance;
+                C++;
+                continue;
+            }
+            
+            if(Pos.X >= Terminal->BufferSize.X) {
+                break;
+            }
+            
+            font_character Char = Characters[*C - ' '];
+            if(Char.BitmapFileOffset)
+            {
+                u08 *Bitmap = (u08*)Font + Char.BitmapFileOffset;
+                for(s32 Y = 0; Y < Char.Size.Y; Y++)
+                {
+                    for(s32 X = 0; X < Char.Size.X; X++)
+                    {
+                        u32 _X = Pos.X + Char.BearingX + X;
+                        u32 _Y = Pos.Y - Char.Pos.Y - Char.Size.Y + Y;
+                        u32 PixelIndex = INDEX_2D(_X, _Y, BufferSize.X);
+                        u32 *Pixel = Framebuffer + PixelIndex;
+                        
+                        u08 Grayscale = Bitmap[INDEX_2D(X, Y, Font->BitmapSize.X)];
+                        v4u08 CurrColor = (v4u08){Grayscale, Grayscale, Grayscale, 0};
+                        
+                        *Pixel = MAKE_COLOR(PixelFormat_BGRX_8, CurrColor);
+                    }
+                }
+            }
+            
+            Pos.X += Char.Advance;
+            C++;
         }
         
-        Pos.X += Char.Advance;
-        C++;
+        Pos.Y += Font->AdvanceY;
     }
 }

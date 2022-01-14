@@ -13,10 +13,25 @@ Mem_Set(vptr Dest,
         u08 Data,
         u64 Size)
 {
-    u08 *D08 = (u08*)Dest;
-    while(Size)
-    {
-        *D08++ = Data;
+    u08 *Dest08 = (u08*)Dest;
+    
+    u64 ToAlign = (16 - ((u64)Dest & 15)) & 16;
+    Size -= ToAlign;
+    while(ToAlign) {
+        *Dest08++ = Data;
+        ToAlign--;
+    }
+    
+    u128 *Dest128 = (u128*)Dest;
+    u128 Data128 = U128_Set_1x8(Data);
+    while(Size >= 16) {
+        *Dest128++ = Data128;
+        Size -= 16;
+    }
+    
+    Dest08 = (u08*)Dest128;
+    while(Size) {
+        *Dest08++ = Data;
         Size--;
     }
     

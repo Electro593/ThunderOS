@@ -87,11 +87,30 @@ typedef struct __attribute__((packed)) bitmap_header {
     u32 ImportantColors;
 } bitmap_header;
 
+extern u08  PortIn08(u16 Address);
+extern u16  PortIn16(u16 Address);
+extern u32  PortIn32(u16 Address);
+extern void PortOut08(u16 Address, u08 Data);
+extern void PortOut16(u16 Address, u16 Data);
+extern void PortOut32(u16 Address, u32 Data);
+
+typedef enum io_ports {
+    Port_PS2_Data    = IN OUT 0x60,
+    Port_PS2_Status  = IN     0x64,
+    Port_PS2_Command = OUT    0x64,
+} io_ports;
+
+// internal void _Breakpoint(void) { }
+// internal void KernelError(c08 *File, u32 Line, c08 *Expression);
+
 #include <kernel/efi.h>
 #include <util/intrin.h>
 #include <util/mem.c>
 #include <util/vector.c>
 #include <util/str.c>
+// #include <drivers/acpi.c>
+// #include <drivers/ps2.c>
+// #include <drivers/pcie.c>
 #include <render/font.c>
 #include <render/software.c>
 #include <render/terminal.c>
@@ -158,7 +177,8 @@ Convert(vptr Out,
                 
                 u32 Index = Result.Capacity;
                 do {
-                    Result.Data[--Index] = (UIntValue % 10) + L'0';
+                    Index--;
+                    Result.Data[Index] = (UIntValue % 10) + L'0';
                     UIntValue /= 10;
                 } while(UIntValue > 0);
                 
@@ -172,6 +192,41 @@ Convert(vptr Out,
         }
     }
 }
+
+// internal void
+// KernelError(c08 *File,
+//             u32 Line,
+//             c08 *Expression)
+// {
+//     if(Context.Renderer == NULL ||
+//        Context.Terminal == NULL)
+//     {
+//         //TODO Uhhh... do something here
+//         return;
+//     }
+    
+//     c08 Buffer[32];
+//     u32 Index = sizeof(Buffer);
+//     u32 Value = Line;
+//     Buffer[--Index] = 0;
+//     do {
+//         Buffer[--Index] = (Value % 10) + '0';
+//         Value /= 10;
+//     } while(Value > 0);
+    
+//     WriteToTerminal(Context.Terminal, "Error in ", 0);
+//     WriteToTerminal(Context.Terminal, File, 0);
+//     WriteToTerminal(Context.Terminal, ", on line ", 0);
+//     WriteToTerminal(Context.Terminal, Buffer+Index, 0);
+//     WriteToTerminal(Context.Terminal, ": ", 0);
+//     WriteToTerminal(Context.Terminal, Expression, 0);
+//     WriteToTerminal(Context.Terminal, "\n", 0);
+//     DrawTerminal(Context.Renderer->Framebuffer, Context.Terminal);
+    
+//     // Context.GOP->Blt(Context.GOP, (efi_graphics_output_blt_pixel*)Context.Renderer->Framebuffer, EFI_GraphicsOutputBltOperation_BufferToVideo, 0, 0, 0, 0, Context.Renderer->Size.X, Context.Renderer->Size.Y, 0);
+    
+//     _Breakpoint();
+// }
 
 external efi_status
 EFI_Entry(u64 LoadBase,
@@ -229,25 +284,10 @@ EFI_Entry(u64 LoadBase,
     );
     
     efi_loaded_image_protocol *LoadedImage = NULL;
-    SystemTable->BootServices->HandleProtocol(ImageHandle, &EFI_LOADED_IMAGE_PROTOCOL_GUID, (vptr*)&LoadedImage);
-    
-    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Image base is at: 0x");
-    u32 Index = 32;
-    c16 Buffer[32];
-    Buffer[--Index] = 0;
-    u64 Value = (u64)LoadedImage->ImageBase;
-    do {
-        u32 Digit = Value % 16;
-        if(Digit < 10) Buffer[--Index] = Digit + L'0';
-        else           Buffer[--Index] = Digit - 10 + L'A';
-        Value /= 16;
-    } while(Value > 0);
-    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer + Index);
-    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"\n\r");
-    
+    SystemTable->BootServices->HandleProtocol(ImageHandle, &EFI_GUID_LOADED_IMAGE_PROTOCOL, (vptr*)&LoadedImage);
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Waiting for debugger...\n\r");
     
-    // asm ("int $3");
+    // asm("int $3");
     
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Debugger Connected!\n\r");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Welcome to ThunderOS.\n\r");
@@ -256,7 +296,7 @@ EFI_Entry(u64 LoadBase,
     Context.Allocate = Stack_Allocate;
     
     vptr MemBase;
-    u64 StackSize = 4 * 1024 * 1024;
+    u64 StackSize = 64 * 1024 * 1024;
     Status = SystemTable->BootServices->AllocatePool(LoadedImage->ImageDataType, StackSize, &MemBase);
     ASSERT(Status == EFI_Status_Success);
     u08 *MemCursor = MemBase;
@@ -266,11 +306,51 @@ EFI_Entry(u64 LoadBase,
     MemCursor += StackSize;
     
     
+    // u64 MemoryMapSize = 0;
+    // Status = SystemTable->BootServices->GetMemoryMap(&MemoryMapSize, NULL, NULL, NULL, NULL);
+    // u64 MemoryMapKey, MemoryDescriptorSize;
+    // efi_memory_descriptor *MemoryMap = Context.Allocate(MemoryMapSize);
+    // Status = SystemTable->BootServices->GetMemoryMap(&MemoryMapSize, MemoryMap, &MemoryMapKey, &MemoryDescriptorSize, NULL);
+    // u32 MemoryDescriptorCount = MemoryMapSize / MemoryDescriptorSize;
+    // for(u32 DescriptorIndex = 0; DescriptorIndex < MemoryDescriptorCount; ++DescriptorIndex)
+    // {
+    //     efi_memory_descriptor Descriptor = MemoryMap[DescriptorIndex];
+    // }
+    
+    
+    // rsdp *RSDP = NULL;
+    // {
+    //     rsdp *RSDPVersion1 = NULL;
+    //     efi_configuration_table *ConfigTable = SystemTable->ConfigTable;
+    //     for(u32 Index = 0; Index < SystemTable->ConfigTableEntryCount; ++Index)
+    //     {
+    //         if(*(u64*)&ConfigTable->VendorGuid.Data1 == *(u64*)&EFI_GUID_ACPI_TABLE_1_0.Data1 &&
+    //            *(u64*)&ConfigTable->VendorGuid.Data4 == *(u64*)&EFI_GUID_ACPI_TABLE_1_0.Data4) {
+    //             RSDPVersion1 = ConfigTable->VendorTable;
+    //             // Assert(RSDPVersion1->Revision == 0);
+    //         }
+            
+    //         if(*(u64*)&ConfigTable->VendorGuid.Data1 == *(u64*)&EFI_GUID_ACPI_TABLE_2_0.Data1 &&
+    //            *(u64*)&ConfigTable->VendorGuid.Data4 == *(u64*)&EFI_GUID_ACPI_TABLE_2_0.Data4) {
+    //             RSDP = ConfigTable->VendorTable;
+    //             // Assert(RSDP->Revision == 2);
+    //         }
+            
+    //         ++ConfigTable;
+    //     }
+        
+    //     if(RSDP == NULL)
+    //         RSDP = RSDPVersion1;
+    // }
+    
+    
+    
     
     // TODO: Verify that ASSERT works and make a better one
     // TODO: Replace this with GPU stuff eventually
-    efi_guid GOPGUID = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+    efi_guid GOPGUID = EFI_GUID_GRAPHICS_OUTPUT_PROTOCOL;
     efi_graphics_output_protocol *GOP;
+    // Context.GOP = GOP;
     Status = SystemTable->BootServices->LocateProtocol(&GOPGUID, NULL, (vptr*)&GOP);
     ASSERT(Status == EFI_Status_Success);
     
@@ -297,20 +377,20 @@ EFI_Entry(u64 LoadBase,
         
     }
     
-    efi_graphics_output_blt_pixel Pixel = {0};
-    GOP->Blt(GOP, &Pixel, EFI_GraphicsOutputBltOperation_VideoFill, 0, 0, 0, 0, 800, 600, 0);
-    
     software_renderer Renderer = {0};
     Renderer.Format = GOP->Mode->Info->PixelFormat == EFI_GraphicsPixelFormat_BlueGreenRedReserved8BitPerColor ? PixelFormat_BGRX_8 : PixelFormat_RGBX_8;
     Renderer.Size = (v2u32){GOP->Mode->Info->HorizontalResolution,
                             GOP->Mode->Info->VerticalResolution};
-    Renderer.Framebuffer = (u08*)GOP->Mode->FrameBufferBase;
+    u64 FramebufferSize = Renderer.Size.X * Renderer.Size.Y * 4;
+    u32 *Framebuffer = Context.Allocate(FramebufferSize);
+    Renderer.Framebuffer = Framebuffer;
     Renderer.Pitch = 4 * GOP->Mode->Info->PixelsPerScanLine;
     Renderer.BackgroundColor = V4u08(0, 0, 0, 0);
-    Raytrace(&Renderer, (v3r32){0,0,0}, NULL, NULL, NULL, 0);
+    // Context.Renderer = &Renderer;
+    
     
     efi_simple_file_system_protocol *SFSP = NULL;
-    SystemTable->BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID, (vptr)&SFSP);
+    SystemTable->BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_GUID_SIMPLE_FILE_SYSTEM_PROTOCOL, (vptr)&SFSP);
     efi_file_protocol *Volume = NULL;
     SFSP->OpenVolume(SFSP, &Volume);
     
@@ -319,10 +399,10 @@ EFI_Entry(u64 LoadBase,
     u64 BufferSize;
     efi_file_info *FileInfo = Context.Allocate(sizeof(efi_file_info));
     Status = Volume->Open(Volume, &FileHandle, L"\\assets\\cour.ttf", EFI_FileMode_Read, 0);
-    Status = FileHandle->GetInfo(FileHandle, &EFI_FILE_INFO_ID, &BufferSize, FileInfo);
+    Status = FileHandle->GetInfo(FileHandle, &EFI_GUID_FILE_INFO, &BufferSize, FileInfo);
     if(Status == EFI_Status_BufferTooSmall) {
         FileInfo = Context.Allocate(BufferSize);
-        Status = FileHandle->GetInfo(FileHandle, &EFI_FILE_INFO_ID, &BufferSize, FileInfo);
+        Status = FileHandle->GetInfo(FileHandle, &EFI_GUID_FILE_INFO, &BufferSize, FileInfo);
     }
     TTFData = Context.Allocate(FileInfo->FileSize);
     Status = FileHandle->Read(FileHandle, &FileInfo->FileSize, TTFData);
@@ -336,20 +416,59 @@ EFI_Entry(u64 LoadBase,
     Status = FileHandle->Write(FileHandle, &FontFileSize, FontFile);
     Status = FileHandle->Close(FileHandle);
     
-    c08 Text[] = "Hello, world!\n\t    Pleasant day it is outside, isn't it?\n\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 1234567890`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?\nNewline: [\n]\nTab: [\t]";
+    c08 Text[] = "Hello, world!\n\t    Pleasant day it is outside, isn't it?\n\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 1234567890`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?\nNewline: [\n]\nTab: [\t]\n";
     terminal Terminal = InitTerminal(100, 2000, FontFile, Renderer.Size);
-    WriteToTerminal(&Terminal, Text, sizeof(Text));
-    DrawTerminal((u32*)Renderer.Framebuffer, &Terminal);
+    // Context.Terminal = &Terminal;
+    WriteToTerminal(&Terminal, Text, sizeof(Text)-1);
+    DrawTerminal(Framebuffer, &Terminal);
+    GOP->Blt(GOP, (efi_graphics_output_blt_pixel*)Framebuffer, EFI_GraphicsOutputBltOperation_BufferToVideo, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
     for(u32 Line = 0; Line < 30; Line++) {
-        GOP->Blt(GOP, &Pixel, EFI_GraphicsOutputBltOperation_VideoFill, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
+        Mem_Set(Framebuffer, 0, FramebufferSize);
         
-        c08 NewText[] = "\nLine --";
-        NewText[6] = (Line / 10) + '0';
-        NewText[7] = (Line % 10) + '0';
-        WriteToTerminal(&Terminal, NewText, sizeof(NewText));
-        DrawTerminal((u32*)Renderer.Framebuffer, &Terminal);
+        c08 NewText[] = "Line --\n";
+        NewText[5] = (Line / 10) + '0';
+        NewText[6] = (Line % 10) + '0';
+        WriteToTerminal(&Terminal, NewText, sizeof(NewText)-1);
+        DrawTerminal(Framebuffer, &Terminal);
+        
+        GOP->Blt(GOP, (efi_graphics_output_blt_pixel*)Framebuffer, EFI_GraphicsOutputBltOperation_BufferToVideo, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
     }
     
+    // Assert(FALSE);
+    
+    // SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"Image base is at: 0x");
+    // u32 Index = 32;
+    // c16 Buffer[32];
+    // Buffer[--Index] = 0;
+    // u64 Value = (u64)LoadedImage->ImageBase;
+    // do {
+    //     u32 Digit = Value % 16;
+    //     if(Digit < 10) Buffer[--Index] = Digit + L'0';
+    //     else           Buffer[--Index] = Digit - 10 + L'A';
+    //     Value /= 16;
+    // } while(Value > 0);
+    // SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer + Index);
+    // SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, L"\n\r");
+    WriteToTerminal(&Terminal, "Image base is at: 0x", 0);
+    u32 Index = 32;
+    c08 Buffer[32];
+    Buffer[--Index] = 0;
+    int i = 0;
+    if(Index == 30) {
+        int i = 1;
+    }
+    u64 Value = (u64)LoadedImage->ImageBase;
+    do {
+        u32 Digit = Value % 16;
+        if(Digit < 10) Buffer[--Index] = Digit + '0';
+        else           Buffer[--Index] = Digit - 10 + 'A';
+        Value /= 16;
+    } while(Value > 0);
+    WriteToTerminal(&Terminal, Buffer + Index, 0);
+    WriteToTerminal(&Terminal, "\n", 0);
+    Mem_Set(Framebuffer, 0, FramebufferSize);
+    DrawTerminal(Framebuffer, &Terminal);
+    GOP->Blt(GOP, (efi_graphics_output_blt_pixel*)Framebuffer, EFI_GraphicsOutputBltOperation_BufferToVideo, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
     
     b08 Wait = TRUE;
     while(Wait)

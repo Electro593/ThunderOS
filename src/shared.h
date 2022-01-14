@@ -25,8 +25,12 @@
 #endif
 
 #define STATIC_ASSERT(Expression, Message) _Static_assert(Expression, Message);
-#define ASSERT(Expression) {if(!(Expression)) asm volatile ("int $3"); }
+#define ASSERT(Expression) { if(!(Expression)) asm volatile ("int $3"); }
+// #define Assert(Expression) { if(!(Expression)) asm volatile ("int $3"); }
+#define Assert(Expression) { if(!(Expression)) KernelError(__FILE__, __LINE__, #Expression); }
 #define NO_DEFAULT default: { ASSERT(FALSE); }
+#define OFFSETOF(Type, Field) ((u64)&((Type*)0)->Field)
+#define SIZEOF(Type, Field)  (sizeof(((Type*)0)->Field))
 #define SWAP(A, B) { typeof(A) Temp = A; A = B; B = Temp; }
 #define LITERAL_CAST(EndType, StartType, ...) (*(EndType*)&(StartType){__VA_ARGS__})
 #define FORCE_CAST(Type, ...) (*(Type*)&(__VA_ARGS__))
@@ -79,6 +83,10 @@ typedef struct context {
     vptr (API *Allocate) (u64 Size);
     
     struct stack *Stack;
+    // struct software_renderer *Renderer;
+    // struct terminal *Terminal;
+    
+    // struct efi_graphics_output_protocol *GOP;
     
     struct context *PrevContext;
 } context;

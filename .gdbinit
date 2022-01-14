@@ -14,20 +14,14 @@ define wc_print
   echo "\n
 end
 
-
-
 info files
 file
-add-symbol-file ./build/ThunderOS_Debug.efi 0x644A000 -s .data 0x6458000
+add-symbol-file ./build/ThunderOS_Debug.efi 0x3E422000 -s .data 0x3E436000
 
 set architecture i386:x86-64:intel
 set disassembly-flavor intel
 target remote :1234
 
-#file build/ThunderOS.efi
-#symbol-file ./build/ThunderOS_Debug.efi
-
-
-
 break EFI_Entry
+break _Breakpoint
 c

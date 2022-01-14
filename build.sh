@@ -1,11 +1,13 @@
 COMPILER="GCC"
+ASSEMBLER="nasm"
 ARCH=$(uname -m | sed s,i[3456789]86,ia32,)
 SRCS="src/kernel/entry.c"
+ASMS="src/kernel/x64.asm"
 TARGET="build/ThunderOS.efi"
 TARGET_DBG="build/ThunderOS_Debug.efi"
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Iuefi -Isrc"
 # CFLAGS="$CFLAGS -Ofast -fno-tree-slp-vectorize"
-CFLAGS="$CFLAGS -ggdb3"
+CFLAGS="$CFLAGS -ggdb3 -fvar-tracking"
 LFLAGS="-nostdlib -shared -Bsymbolic"
 SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .reloc" #  -j .rel.* -j .rela.*
 SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str -j .debug_line_str"
@@ -40,17 +42,20 @@ for SRC in $SRCS; do
     # gcc $CFLAGS -c -Wa,-adhln $SRC -o /dev/null > build/listing.s
     gcc $CFLAGS -E $SRC -o build/preprocessed.i
     gcc $CFLAGS -c $SRC -o ${SRC}.o
-    # gcc $CFLAGS_DBG -c $SRC -o ${SRC}.o
     OBJS="$OBJS ${SRC}.o"
+done
+
+for ASM in $ASMS; do
+    nasm -g -f elf64 $ASM -o ${ASM}.o
+    OBJS="$OBJS ${ASM}.o"
 done
 
 ld $LFLAGS $OBJS $LIBS
 ld $LFLAGS $OBJS $LIBS_DBG
 if [ $COMPILER = "GCC" ]; then
-    # objcopy --target $EFIARCH --subsystem=10 --strip-debug ${TARGET_DBG}.so $TARGET
-    objcopy --target $EFIARCH --subsystem=10 --only-keep-debug ${TARGET_DBG}.so $TARGET_DBG
-    objcopy $SECTIONS --target $EFIARCH --subsystem=10 ${TARGET}.so $TARGET
-    # objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 ${TARGET_DBG}.so $TARGET_DBG
+    # objcopy --target $EFIARCH --subsystem=10 --only-keep-debug ${TARGET_DBG}.so $TARGET_DBG
+    objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 ${TARGET_DBG}.so $TARGET_DBG
+    objcopy $SECTIONS     --target $EFIARCH --subsystem=10 ${TARGET}.so     $TARGET
 fi
 
 objdump -l -S -d --source-comment ${TARGET_DBG}.so > build/listing.asm
@@ -62,9 +67,11 @@ find src/ build/ -name "*.o"  | xargs rm 2>/dev/null
 find src/ build/ -name "*.so" | xargs rm 2>/dev/null
 
 
-sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd
-sudo mount -t auto -o rw /dev/nbd0p1 /mnt
-# sudo cp -r assets /mnt/
+IsMounted=$(mount | grep '/mnt')
+if [ "$IsMounted" = "" ]; then
+    sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd
+    sudo mount -t auto -o rw /dev/nbd0p1 /mnt
+fi
 sudo cp build/ThunderOS.efi /mnt/EFI/BOOT/BOOTX64.efi
 sudo umount /dev/nbd0p1
 sudo qemu-nbd -d /dev/nbd0
