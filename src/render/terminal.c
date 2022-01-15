@@ -18,7 +18,9 @@ typedef struct terminal {
     
     font_header *Font;
     v2u32 BufferSize;
+    
     u32 PosX;
+    c08 *LastWordBreak;
 } terminal;
 
 internal terminal
@@ -39,6 +41,7 @@ InitTerminal(u32 MaxLines,
     Terminal.Font = Font;
     Terminal.BufferSize = BufferSize;
     Terminal.PosX = 0;
+    Terminal.LastWordBreak = NULL;
     return Terminal;
 }
 
@@ -53,13 +56,15 @@ WriteToTerminal(terminal *Terminal,
     }
     
     u32 PosX = Terminal->PosX;
+    c08 *LastWordBreak = Terminal->LastWordBreak;
     font_header *Font = Terminal->Font;
     font_character *Characters = (font_character*)(Terminal->Font+1);
     
     u32 NewCharCount = Terminal->CharCount + CharCount;
-    ASSERT(NewCharCount < Terminal->MaxChars);
+    // Assert(NewCharCount < Terminal->MaxChars);
     
     font_character Char;
+    u32 PosAtBreak = 0;
     c08 *C = TextToWrite;
     c08 *Buf = Terminal->Cursor;
     while(*C)
@@ -76,19 +81,35 @@ WriteToTerminal(terminal *Terminal,
             AddDifference = TRUE;
         }
         
+        if(*C == ' ' || *C == '\t' || *C == '\n' || *C == '-') {
+            LastWordBreak = Buf;
+            if(AddDifference)
+                PosAtBreak = PosX + ToAdvance;
+            else
+                PosAtBreak = 0;
+        }
+        
         if(PosX + ToAdvance >= Terminal->BufferSize.X) {
             if(AddDifference) {
-                PosX = PosX + ToAdvance - Terminal->BufferSize.X;
+                PosX = PosX + ToAdvance;
             } else {
                 PosX = 0;
             }
             
-            ASSERT(Terminal->LineNum < Terminal->MaxLines);
-            Terminal->Lines[Terminal->LineNum++] = Buf;
+            // Assert(Terminal->LineNum < Terminal->MaxLines);
+            if(LastWordBreak == NULL) {
+                Terminal->Lines[Terminal->LineNum++] = Buf;
+                PosX = ToAdvance;
+            } else {
+                Terminal->Lines[Terminal->LineNum++] = LastWordBreak+1;
+                LastWordBreak = NULL;
+                PosX = PosX - PosAtBreak;
+            }
         } else {
             PosX += ToAdvance;
         }
         
+        // if(*C == '\n') continue;
         *Buf++ = *C++;
     }
     
@@ -96,6 +117,7 @@ WriteToTerminal(terminal *Terminal,
     Terminal->Cursor = Buf;
     Terminal->CharCount = NewCharCount;
     Terminal->PosX = PosX;
+    Terminal->LastWordBreak = LastWordBreak;
 }
 
 internal void
@@ -135,11 +157,12 @@ DrawTerminal(u32 *Framebuffer,
                 continue;
             }
             
-            if(Pos.X >= Terminal->BufferSize.X) {
+            font_character Char = Characters[*C - ' '];
+            
+            if(Pos.X + Char.Advance >= Terminal->BufferSize.X) {
                 break;
             }
             
-            font_character Char = Characters[*C - ' '];
             if(Char.BitmapFileOffset)
             {
                 u08 *Bitmap = (u08*)Font + Char.BitmapFileOffset;

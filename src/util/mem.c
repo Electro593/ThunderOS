@@ -54,6 +54,23 @@ Mem_Cpy(vptr Dest,
     return Dest;
 }
 
+internal vptr
+Mem_Tile(vptr Dest,
+         u64 DestSize,
+         vptr Tile,
+         u64 TileSize)
+{
+    u32 TileCount = DestSize / TileSize;
+    u08 *WriteCursor = (u08*)Dest;
+    for(u32 Index = 0; Index < TileCount; ++Index)
+    {
+        Mem_Cpy(WriteCursor, Tile, TileSize);
+        WriteCursor += TileSize;
+    }
+    
+    return Dest;
+}
+
 internal s32
 Mem_Cmp(vptr A,
         vptr B,

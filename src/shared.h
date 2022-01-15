@@ -26,7 +26,6 @@
 
 #define STATIC_ASSERT(Expression, Message) _Static_assert(Expression, Message);
 #define ASSERT(Expression) { if(!(Expression)) asm volatile ("int $3"); }
-// #define Assert(Expression) { if(!(Expression)) asm volatile ("int $3"); }
 #define Assert(Expression) { if(!(Expression)) KernelError(__FILE__, __LINE__, #Expression); }
 #define NO_DEFAULT default: { ASSERT(FALSE); }
 #define OFFSETOF(Type, Field) ((u64)&((Type*)0)->Field)
@@ -83,14 +82,14 @@ typedef struct context {
     vptr (API *Allocate) (u64 Size);
     
     struct stack *Stack;
-    // struct software_renderer *Renderer;
-    // struct terminal *Terminal;
+    struct terminal *Terminal;
     
-    // struct efi_graphics_output_protocol *GOP;
+    u32 *Framebuffer;
+    u64 FramebufferSize;
     
     struct context *PrevContext;
 } context;
-global volatile context Context;
+global context Context;
 
 typedef enum type {
     Type_C08p,

@@ -65,7 +65,7 @@ Print(str String,
                 C++;
                 while(*C != L'$')
                     Buffer[Index++] = *C++;
-                ASSERT(Index <= sizeof(Buffer) / sizeof(Buffer[0]));
+                Assert(Index <= sizeof(Buffer) / sizeof(Buffer[0]));
                 
                 if(Mem_Cmp(Buffer, L"c08*", Index) == EQUAL)
                 {

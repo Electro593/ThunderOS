@@ -222,4 +222,6 @@ CreateFontFile(vptr FontData,
     
     *DataOut = FileData;
     *DataOutSize = FileSize;
+    
+    return TRUE;
 }
