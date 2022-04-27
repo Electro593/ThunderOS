@@ -25,8 +25,8 @@ if [ $COMPILER = "GCC" ]; then
         CFLAGS="$CFLAGS -maccumulate-outgoing-args"
     fi
     CFLAGS="$CFLAGS -Wno-builtin-declaration-mismatch -fpic -fPIC"
-    LIBS="-o ${TARGET}.so -Telf_${ARCH}_efi.lds"
-    LIBS_DBG="-o ${TARGET_DBG}.so -Telf_${ARCH}_efi.lds"
+    LIBS="-o ${TARGET}.so -Tscripts/elf_${ARCH}_efi.lds"
+    LIBS_DBG="-o ${TARGET_DBG}.so -Tscripts/elf_${ARCH}_efi.lds"
     if [ $ARCH = "aarch64" ]; then
         EFIARCH="pei-aarch64-little"
     else
@@ -34,7 +34,7 @@ if [ $COMPILER = "GCC" ]; then
     fi
 else
     CFLAGS="$CFLAGS --target=${ARCH}-pc-win32-coff -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration -Wno-long-long"
-    LFLAGS="$LFLAGS -subsystem:efi_application -nodefaultlib -dll -entry:EFI_Entry"
+    LFLAGS="$LFLAGS -subsystem:efi_application -nodefaultlib -dll"
     LIBS_DBG="-out:${TARGET_DBG}"
 fi
 
@@ -67,11 +67,11 @@ find src/ build/ -name "*.o"  | xargs rm 2>/dev/null
 find src/ build/ -name "*.so" | xargs rm 2>/dev/null
 
 
-IsMounted=$(mount | grep '/mnt')
-if [ "$IsMounted" = "" ]; then
+# IsMounted=$(mount | grep '/mnt')
+# if [ "$IsMounted" = "" ]; then
     sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd
     sudo mount -t auto -o rw /dev/nbd0p1 /mnt
-fi
+# fi
 sudo cp build/ThunderOS.efi /mnt/EFI/BOOT/BOOTX64.efi
 sudo umount /dev/nbd0p1
 sudo qemu-nbd -d /dev/nbd0

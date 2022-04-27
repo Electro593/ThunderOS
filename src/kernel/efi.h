@@ -48,8 +48,8 @@
 typedef vptr efi_handle;
 typedef vptr efi_event;
 typedef u64  efi_tpl;
-typedef u64  efi_physical_address;
-typedef u64  efi_virtual_address;
+typedef vptr efi_physical_address;
+typedef vptr efi_virtual_address;
 
 
 

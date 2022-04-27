@@ -11,7 +11,7 @@
         {
             "label": "Build Program (SH)",
             "type": "shell",
-            "command": "bash build.sh",
+            "command": "bash scripts/build.sh",
             "group": "build",
             "problemMatcher": "$gcc",
             "presentation": {
@@ -35,7 +35,7 @@
         {
             "label": "Run Program (SH)",
             "type": "shell",
-            "command": "bash run.sh",
+            "command": "bash scripts/run.sh",
             "group": {
                 "kind": "test",
                 "isDefault": true

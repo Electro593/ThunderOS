@@ -76,16 +76,17 @@ Mem_Cmp(vptr A,
         vptr B,
         u64 Size)
 {
+    u64 I = 0;
     u08 *CA = (u08*)A;
     u08 *CB = (u08*)B;
-    while(Size && *CA == *CB)
+    while(I < Size && *CA == *CB)
     {
         CA++;
         CB++;
-        Size--;
+        I++;
     }
     
-    if(Size == 0) return EQUAL;
+    if(I == Size) return EQUAL;
     if(CA < CB)   return GREATER;
     return LESS;
 }
@@ -104,6 +105,62 @@ Mem_BytesUntil(u08 Byte, vptr Data)
     
     return Length;
 }
+
+
+
+
+// typedef struct page_buddy {
+//     u08 BitCount;
+//     u08 *Bitmap;
+// } page_buddy;
+
+// typedef struct page_allocator {
+//     page_buddy Buddies[8];
+// } page_allocator;
+
+// void PageAlloc(u32 PageCount)
+// {
+//     if(PageCount == 0) return;
+    
+//     s32 BuddyIndex;
+//     if(PageCount == 1) BuddyIndex = 0;
+//     else {
+//         asm("bsr %1, %0"
+//             : "=r" (BuddyIndex)
+//             : "rm" (PageCount-1)
+//         );
+//         BuddyIndex++;
+//     }
+    
+//     u32 I = 0;
+//     page_buddy *Buddy = Context.PageAllocator.Buddies+BuddyIndex;
+//     while(I < Buddy->BitCount) {
+//         b08 Mask = 1 << (I%8);
+//         b08 *Byte = Buddy->Bitmap + I/8;
+//         if(!(*Byte & Mask)) {
+//             *Byte |= Mask;
+//             break;
+//         }
+//         I++;
+//     }
+//     Assert(I < Buddy->BitCount);
+    
+//     while(BuddyIndex > 0) {
+//         BuddyIndex--;
+//         Buddy = Context.PageAllocator.Buddies+BuddyIndex;
+//         b08 *Byte = Buddy->Bitmap + I/4;
+//         b08 Mask = 1 << ((I%4)*2);
+        
+        
+        
+//     }
+// }
+
+
+
+
+
+
 
 
 

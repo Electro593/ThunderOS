@@ -7,6 +7,8 @@
 ;                                                                       |
 ;-----------------------------------------------------------------------|
 
+default rel
+
 [section .text]
 
 [global PortIn08]
@@ -15,6 +17,8 @@
 [global PortOut08]
 [global PortOut16]
 [global PortOut32]
+[global WriteGDTR]
+[global WriteIDTR]
 
 PortIn08:
     mov rdx, rdi
@@ -50,4 +54,26 @@ PortOut32:
     mov rdx, rdi
     mov rax, rsi
     out dx,  eax
+    ret
+
+gdtr dw 0
+     dq 0
+WriteGDTR:
+    mov  rdx, rdi
+    mov  [gdtr + 2], rdx
+    mov  rax, rsi
+    dec  ax
+    mov  [gdtr], ax
+    lgdt [gdtr]
+    ret
+
+idtr dw 0
+     dq 0
+WriteIDTR:
+    mov  rdx, rdi
+    mov  [idtr + 2], rdx
+    mov  rax, rsi
+    dec  ax
+    mov  [idtr], ax
+    lidt [idtr]
     ret

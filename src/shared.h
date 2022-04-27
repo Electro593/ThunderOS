@@ -90,6 +90,9 @@ typedef struct context {
     struct context *PrevContext;
 } context;
 global context Context;
+// global u64 PageDirPtrTbl[4] __attribute__((align(32)));
+// global u64 PageDir[512] __attribute__((align(4096)));
+// global u32 PageTbl[1024] __attribute__((align(4096)));
 
 typedef enum type {
     Type_C08p,

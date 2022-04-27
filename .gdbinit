@@ -24,4 +24,6 @@ target remote :1234
 
 break EFI_Entry
 break _Breakpoint
+break KernelError
+
 c
