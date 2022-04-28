@@ -19,15 +19,14 @@
 #define UNUSED(...) ((void)(__VA_ARGS__))
 
 #if defined(_MSVC)
-#   define API __stdcall
+    #define API __stdcall
 #elif defined(_GCC)
-#   define API
+    #define API
 #endif
 
 #define STATIC_ASSERT(Expression, Message) _Static_assert(Expression, Message);
-#define ASSERT(Expression) { if(!(Expression)) asm volatile ("int $3"); }
 #define Assert(Expression) { if(!(Expression)) KernelError(__FILE__, __LINE__, #Expression); }
-#define NO_DEFAULT default: { ASSERT(FALSE); }
+#define NO_DEFAULT default: { Assert(FALSE); }
 #define OFFSETOF(Type, Field) ((u64)&((Type*)0)->Field)
 #define SIZEOF(Type, Field)  (sizeof(((Type*)0)->Field))
 #define SWAP(A, B) { typeof(A) Temp = A; A = B; B = Temp; }
@@ -36,6 +35,7 @@
 #define BIT_CLEAR(Bitstring, Index) ((Bitstring) & ~(1ULL << (Index)))
 #define INDEX_2D(X, Y, Width) ((X) + (Y)*(Width))
 
+#define persist  static
 #define global   static
 #define internal static
 #define external
@@ -78,27 +78,6 @@ typedef void* vptr;
 #define GREATER 1
 #define LESS -1
 
-typedef struct context {
-    vptr (API *Allocate) (u64 Size);
-    
-    struct stack *Stack;
-    struct terminal *Terminal;
-    
-    u32 *Framebuffer;
-    u64 FramebufferSize;
-    
-    struct context *PrevContext;
-} context;
-global context Context;
-// global u64 PageDirPtrTbl[4] __attribute__((align(32)));
-// global u64 PageDir[512] __attribute__((align(4096)));
-// global u32 PageTbl[1024] __attribute__((align(4096)));
+#define U64_MAX 0xFFFFFFFFFFFFFFFF
 
-typedef enum type {
-    Type_C08p,
-    Type_Str,
-    Type_U08,
-    Type_U16,
-    Type_U32,
-    Type_U64,
-} type;
+#define PAGE_SIZE 4096

@@ -1,77 +1,62 @@
-COMPILER="GCC"
-ASSEMBLER="nasm"
 ARCH=$(uname -m | sed s,i[3456789]86,ia32,)
-SRCS="src/kernel/entry.c"
-ASMS="src/kernel/x64.asm"
-TARGET="build/ThunderOS.efi"
-TARGET_DBG="build/ThunderOS_Debug.efi"
-CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Iuefi -Isrc"
-# CFLAGS="$CFLAGS -Ofast -fno-tree-slp-vectorize"
-CFLAGS="$CFLAGS -ggdb3"
-LFLAGS="-nostdlib -shared -Bsymbolic"
-SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .reloc" #  -j .rel.* -j .rela.*
-SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str -j .debug_line_str"
 
 if [ ! -d build ]; then
     mkdir build
 fi
 
-if [ $ARCH = "x86_64" ]; then
-    CFLAGS="$CFLAGS -DHAVE_USE_MS_ABI -mno-red-zone"
-fi
 
-if [ $COMPILER = "GCC" ]; then
-    if [ $ARCH = "x86_64" ]; then
-        CFLAGS="$CFLAGS -maccumulate-outgoing-args"
-    fi
-    CFLAGS="$CFLAGS -Wno-builtin-declaration-mismatch -fpic -fPIC"
-    LIBS="-o ${TARGET}.so -Tscripts/elf_${ARCH}_efi.lds"
-    LIBS_DBG="-o ${TARGET_DBG}.so -Tscripts/elf_${ARCH}_efi.lds"
-    if [ $ARCH = "aarch64" ]; then
-        EFIARCH="pei-aarch64-little"
-    else
-        EFIARCH="efi-app-${ARCH}"
-    fi
+
+CFLAGS="-fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Wno-builtin-declaration-mismatch -fomit-frame-pointer -fno-asynchronous-unwind-tables -mno-red-zone"
+CFLAGS="-Wall -Wextra -fshort-wchar -Isrc"
+CFLAGS="$CFLAGS -ggdb3"
+# CFLAGS="$CFLAGS -Ofast -fno-tree-slp-vectorize"
+# CFLAGS="$CFLAGS -ggdb3"
+
+# gcc $CFLAGS -E src/kernel/entry.c -o build/loader.i
+gcc $CFLAGS -fpic -fPIC -c src/kernel/entry.c -o build/loader.o
+gcc $CFLAGS -c src/kernel/kernel.c -o build/kernel.o
+
+
+
+nasm -g -f elf64 src/kernel/x64.asm -o build/asm.o
+
+
+
+LFLAGS="-nostdlib -shared -Bsymbolic"
+ld $LFLAGS -Tscripts/elf_${ARCH}_efi.lds build/loader.o -o build/loader.so
+ld $LFLAGS -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel
+
+if [ $ARCH = "aarch64" ]; then
+    EFIARCH="pei-aarch64-little"
 else
-    CFLAGS="$CFLAGS --target=${ARCH}-pc-win32-coff -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration -Wno-long-long"
-    LFLAGS="$LFLAGS -subsystem:efi_application -nodefaultlib -dll"
-    LIBS_DBG="-out:${TARGET_DBG}"
+    EFIARCH="efi-app-${ARCH}"
 fi
+SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .reloc"
+SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str -j .debug_line_str"
+objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 build/loader.so build/loader_dbg
+objcopy $SECTIONS     --target $EFIARCH --subsystem=10 build/loader.so build/loader
 
-for SRC in $SRCS; do
-    # gcc $CFLAGS -c -Wa,-adhln $SRC -o /dev/null > build/listing.s
-    gcc $CFLAGS -E $SRC -o build/preprocessed.i
-    gcc $CFLAGS -c $SRC -o ${SRC}.o
-    OBJS="$OBJS ${SRC}.o"
-done
+strip -R .note* build/kernel
+strip -R .comment build/kernel
 
-for ASM in $ASMS; do
-    nasm -g -f elf64 $ASM -o ${ASM}.o
-    OBJS="$OBJS ${ASM}.o"
-done
-
-ld $LFLAGS $OBJS $LIBS
-ld $LFLAGS $OBJS $LIBS_DBG
-if [ $COMPILER = "GCC" ]; then
-    # objcopy --target $EFIARCH --subsystem=10 --only-keep-debug ${TARGET_DBG}.so $TARGET_DBG
-    objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 ${TARGET_DBG}.so $TARGET_DBG
-    objcopy $SECTIONS     --target $EFIARCH --subsystem=10 ${TARGET}.so     $TARGET
-fi
-
-objdump -l -S -d --source-comment ${TARGET_DBG}.so > build/listing.asm
-# objdump -l -S -d --source-comment build/ThunderOS_Debug.efi > build/listing.asm
-# objdump --all-headers build/ThunderOS.efi > build/dump
-objdump --all-headers build/ThunderOS_Debug.efi > build/dump
-
-find src/ build/ -name "*.o"  | xargs rm 2>/dev/null
-find src/ build/ -name "*.so" | xargs rm 2>/dev/null
+objdump -l -S -d --source-comment build/loader.so > build/loader.asm
+objdump -l -S -d --source-comment build/kernel > build/kernel.asm
+objdump --all-headers build/loader_dbg > build/loader.dump
+objdump --all-headers build/kernel > build/kernel.dump
 
 
-# IsMounted=$(mount | grep '/mnt')
-# if [ "$IsMounted" = "" ]; then
+
+find build/ -name "*.o"  | xargs rm 2>/dev/null
+find build/ -name "*.so" | xargs rm 2>/dev/null
+
+
+
+IsMounted=$(mount | grep '/mnt')
+if [ "$IsMounted" = "" ]; then
     sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd
     sudo mount -t auto -o rw /dev/nbd0p1 /mnt
-# fi
-sudo cp build/ThunderOS.efi /mnt/EFI/BOOT/BOOTX64.efi
+fi
+sudo cp build/loader /mnt/EFI/BOOT/BOOTX64.efi
+sudo cp build/kernel /mnt/kernel
 sudo umount /dev/nbd0p1
 sudo qemu-nbd -d /dev/nbd0

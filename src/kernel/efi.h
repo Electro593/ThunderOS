@@ -58,22 +58,40 @@ typedef void (EFI_API *func_EFI_EventNotify)(IN efi_event Event, IN vptr Context
 
 
 typedef enum efi_status {
-    EFI_Status_Success          = 0x00,
-    EFI_Status_LoadError        = 0x01,
-    EFI_Status_InvalidParameter = 0x02,
-    EFI_Status_Unsupported      = 0x03,
-    EFI_Status_BadBufferSize    = 0x04,
-    EFI_Status_BufferTooSmall   = 0x05,
-    EFI_Status_NotReady         = 0x06,
-    EFI_Status_DeviceError      = 0x07,
-    EFI_Status_WriteProtected   = 0x08,
-    EFI_Status_OutOfResources   = 0x09,
-    EFI_Status_VolumeCorrupted  = 0x0A,
-    EFI_Status_VolumeFull       = 0x0B,
-    EFI_Status_NoMedia          = 0x0C,
-    EFI_Status_MediaChanged     = 0x0D,
-    EFI_Status_NotFound         = 0x0E,
-    EFI_Status_AccessDenied     = 0x0F,
+    EFI_Status_Success             = 0x00,
+    EFI_Status_LoadError           = 0x01,
+    EFI_Status_InvalidParameter    = 0x02,
+    EFI_Status_Unsupported         = 0x03,
+    EFI_Status_BadBufferSize       = 0x04,
+    EFI_Status_BufferTooSmall      = 0x05,
+    EFI_Status_NotReady            = 0x06,
+    EFI_Status_DeviceError         = 0x07,
+    EFI_Status_WriteProtected      = 0x08,
+    EFI_Status_OutOfResources      = 0x09,
+    EFI_Status_VolumeCorrupted     = 0x0A,
+    EFI_Status_VolumeFull          = 0x0B,
+    EFI_Status_NoMedia             = 0x0C,
+    EFI_Status_MediaChanged        = 0x0D,
+    EFI_Status_NotFound            = 0x0E,
+    EFI_Status_AccessDenied        = 0x0F,
+    EFI_Status_NoResponse          = 0x10,
+    EFI_Status_NoMapping           = 0x11,
+    EFI_Status_Timeout             = 0x12,
+    EFI_Status_NotStarted          = 0x13,
+    EFI_Status_AlreadyStarted      = 0x14,
+    EFI_Status_Aborted             = 0x15,
+    EFI_Status_ICMPError           = 0x16,
+    EFI_Status_TFTPError           = 0x17,
+    EFI_Status_ProtocolError       = 0x18,
+    EFI_Status_IncompatibleVersion = 0x19,
+    EFI_Status_SecurityViolation   = 0x1A,
+    EFI_Status_CRCError            = 0x1B,
+    EFI_Status_EndOfMedia          = 0x1C,
+    EFI_Status_EndOfFile           = 0x1F,
+    EFI_Status_InvalidLanguage     = 0x20,
+    EFI_Status_CompromisedData     = 0x21,
+    EFI_Status_IPAddressConflict   = 0x22,
+    EFI_Status_HTTPError           = 0x23,
 } efi_status;
 
 typedef enum efi_tpl_enum {
@@ -186,7 +204,7 @@ typedef struct efi_memory_descriptor {
     efi_memory_type Type;
     efi_physical_address PhysicalStart;
     efi_virtual_address VirtualStart;
-    u64 NumberOfPages;
+    u64 PageCount;
     u64 Attribute;
 } efi_memory_descriptor;
 

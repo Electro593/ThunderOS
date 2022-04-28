@@ -8,6 +8,9 @@
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #include <shared.h>
+
+#define INCLUDE_HEADER
+#define INCLUDE_SOURCE
 #include <kernel/elf.h>
 
 // CREDIT: POSIX-UEFI
@@ -67,203 +70,37 @@ asm (
 "         jmp *0x38(%rdi)       \n"
 );
 
-internal void KernelError(c08 *File, u32 Line, c08 *Expression);
-internal void Convert(vptr Out, type TypeOut, vptr In, type TypeIn);
-
-typedef struct __attribute__((packed)) bitmap_header {
-    c08 Signature[2];
-    u32 FileSize;
-    u32 Reserved;
-    u32 DataOffset;
-    u32 Size;
-    u32 Width;
-    u32 Height;
-    u16 Planes;
-    u16 BitsPerPixel;
-    u32 Compression;
-    u32 ImageSize;
-    u32 XPixelsPerM;
-    u32 YPixelsPerM;
-    u32 ColorsUsed;
-    u32 ImportantColors;
-} bitmap_header;
-
-typedef struct gdt_segment_descriptor {
-    u16 Limit;
-    u16 BaseP1;
-    u08 BaseP2;
-    u08 AccessByte;
-    u08 Attributes;
-    u08 BaseP3;
-} gdt_segment_descriptor;
-
-typedef struct gdt {
-    gdt_segment_descriptor Entries[8];
-} gdt;
-
-typedef enum interrupt_ids {
-    Interrupt_Test = 0x00,
-} interrupt_ids;
-
-typedef enum idt_attribute_flags {
-    IDT_Gate_Interrupt = 0b1110,
-    IDT_Gate_Trap      = 0b1111,
-    
-    IDT_DPL_Ring0 = 0b00,
-    IDT_DPL_Ring1 = 0b01,
-    IDT_DPL_Ring2 = 0b10,
-    IDT_DPL_Ring3 = 0b11,
-} idt_attribute_flags;
-
-typedef struct idt_gate_descriptor {
-    u16 OffsetP1;
-    u16 SegmentSelector;
-    u16 Attributes;
-    u16 OffsetP2;
-    u32 OffsetP3;
-    u32 _Reserved1;
-} idt_gate_descriptor;
-
-typedef struct idt {
-    idt_gate_descriptor Entries[256];
-} idt;
-
-extern u08  PortIn08(u16 Address);
-extern u16  PortIn16(u16 Address);
-extern u32  PortIn32(u16 Address);
-extern void PortOut08(u16 Address, u08 Data);
-extern void PortOut16(u16 Address, u16 Data);
-extern void PortOut32(u16 Address, u32 Data);
-extern void WriteGDTR(gdt *GDT, u16 Size);
-extern void WriteIDTR(idt *IDT, u16 Size);
-
-typedef enum io_ports {
-    Port_PIC1_Command = 0x20,
-    Port_PIC1_Data    = 0x21,
-    Port_PIC2_Command = 0xA0,
-    Port_PIC2_Data    = 0xA1,
-    Port_PS2_Data     = 0x60,
-    Port_PS2_Status   = 0x64,
-    Port_PS2_Command  = 0x64,
-} io_ports;
-#define PortWait PortOut08(0x80, 0);
-
+// #include <kernel/kernel.c>
 #include <kernel/efi.h>
-#include <util/intrin.h>
-#include <util/mem.c>
-#include <util/vector.c>
-#include <util/str.c>
-#include <drivers/acpi.c>
-#include <drivers/ps2.c>
-#include <render/font.c>
-#include <render/software.c>
-#include <render/terminal.c>
+typedef u32 (*kernel_entry)(efi_graphics_output_protocol *GOP);
 
 internal void
-Convert(vptr Out,
-        type TypeOut,
-        vptr In,
-        type TypeIn)
-{
-    b08 IsUInt = FALSE;
-    u64 UIntValue = 0;
+U64_ToStr(c16 *Buffer, u64 N, u32 Radix) {
+    persist c08 Chars[64] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
     
-    switch(TypeIn) {
-        case Type_C08p: {
-            c08 *C08p = *(c08**)In;
-            u32 Length = Mem_BytesUntil(0, C08p);
-            
-            switch(TypeOut) {
-                case Type_Str: {
-                    str Result;
-                    Result.Length = Mem_BytesUntil(0, C08p);
-                    Result.Capacity = Result.Length;
-                    Result.Data = Context.Allocate(Result.Length * sizeof(c16));
-                    for(u32 I = 0; I < Length; ++I)
-                        Result.Data[I] = (c16)C08p[I];
-                    
-                    *(str*)Out = Result;
-                } break;
-            }
-        } break;
-        
-        case Type_U08: {
-            UIntValue = (u64)*(u08*)In;
-            IsUInt = TRUE;
-        } break;
-        case Type_U16: {
-            UIntValue = (u64)*(u16*)In;
-            IsUInt = TRUE;
-        } break;
-        case Type_U32: {
-            UIntValue = (u64)*(u32*)In;
-            IsUInt = TRUE;
-        } break;
-        case Type_U64: {
-            UIntValue = *(u64*)In;
-            IsUInt = TRUE;
-        } break;
-        
-        NO_DEFAULT;
+    u64 M = N;
+    u32 Len = 1;
+    while(M /= Radix) Len++;
+    
+    if(Radix == 2) {
+        Buffer[0] = '0';
+        Buffer[1] = 'b';
+        Len += 2;
+    } else if(Radix == 8) {
+        Buffer[0] = '0';
+        Len += 1;
+    } else if(Radix == 16) {
+        Buffer[0] = '0';
+        Buffer[1] = 'x';
+        Len += 2;
     }
     
-    if(IsUInt) {
-        switch(TypeOut) {
-            case Type_Str: {
-                str Result;
-                Result.Capacity = 20; // Max length of unsigned 64-bit base 10
-                Result.Data = Context.Allocate(Result.Capacity);
-                
-                u32 Index = Result.Capacity;
-                do {
-                    Index--;
-                    Result.Data[Index] = (UIntValue % 10) + L'0';
-                    UIntValue /= 10;
-                } while(UIntValue > 0);
-                
-                Result.Length = Result.Capacity - Index;
-                Result.Data += Index;
-                
-                *(str*)Out = Result;
-            } break;
-            
-            NO_DEFAULT;
-        }
-    }
-}
-
-// TODO: Remove dependencies to everything
-internal void
-KernelError(c08 *File,
-            u32 Line,
-            c08 *Expression)
-{
-    if(Context.Framebuffer != NULL) {
-        if(Context.Terminal != NULL) {
-            Mem_Set(Context.Framebuffer, 0, Context.FramebufferSize);
-            
-            c08 Buffer[32];
-            u32 Index = sizeof(Buffer);
-            u32 Value = Line;
-            Buffer[--Index] = 0;
-            do {
-                Buffer[--Index] = (Value % 10) + '0';
-                Value /= 10;
-            } while(Value > 0);
-            
-            WriteToTerminal(Context.Terminal, "\n\n", 0);
-            WriteToTerminal(Context.Terminal, File, 0);
-            WriteToTerminal(Context.Terminal, ":", 0);
-            WriteToTerminal(Context.Terminal, Buffer+Index, 0);
-            WriteToTerminal(Context.Terminal, ": ERROR: (", 0);
-            WriteToTerminal(Context.Terminal, Expression, 0);
-            WriteToTerminal(Context.Terminal, ") was FALSE\n", 0);
-            DrawTerminal(Context.Framebuffer, Context.Terminal);
-        }
-    }
+    Buffer[Len--] = 0;
     
-    while(TRUE)
-        asm volatile ("pause");
+    do {
+        u16 Digit = N % Radix;
+        Buffer[Len--] = (c16)Chars[Digit];
+    } while(N /= Radix);
 }
 
 external efi_status
@@ -272,40 +109,103 @@ EFI_Entry(u64 LoadBase,
           efi_system_table *SystemTable,
           efi_handle ImageHandle)
 {
+    UNUSED(LoadBase);
+    UNUSED(Dynamics);
+    
     efi_status Status;
-    Mem_Set(&Context, 0, sizeof(context));
-    Context.PrevContext = (context*)&Context.PrevContext;
+    efi_boot_services *BootServices = SystemTable->BootServices;
+    
+    #define ASSERT(Expression, Message) \
+        do { \
+            if(!(Expression)) { \
+                SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Message); \
+                Status = EFI_Status_Aborted; \
+                goto _error; \
+            } \
+        } while(0)
+    #define SASSERT(DesiredStatus, Message) \
+        ASSERT(DesiredStatus == Status, Message)
+    
+    u64 _MemoryMapSize, MemoryDescriptorSize;
+    Status = BootServices->GetMemoryMap(&_MemoryMapSize, NULL, NULL, &MemoryDescriptorSize, NULL);
+    efi_memory_descriptor *MemoryMap;
+    Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, _MemoryMapSize*2, (vptr*)&MemoryMap);
+    SASSERT(EFI_Status_Success, u"Failed to allocate pool for memory map\r\n");
+    Status = BootServices->GetMemoryMap(&_MemoryMapSize, MemoryMap, NULL, NULL, NULL);
+    u32 MemoryDescriptorCount = _MemoryMapSize / MemoryDescriptorSize;
+    for(u32 I = 0; I < MemoryDescriptorCount; I++) {
+        efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + I*MemoryDescriptorSize);
+        c16 Buffer[35];
+        
+        U64_ToStr(Buffer, Descriptor->Attribute, 10);
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            u"Attribute: ");
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            Buffer);
+        
+        U64_ToStr(Buffer, Descriptor->Type, 10);
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            u"\r\nType: ");
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            Buffer);
+        
+        U64_ToStr(Buffer, Descriptor->PageCount, 10);
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            u"\r\nPageCount: ");
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            Buffer);
+        
+        U64_ToStr(Buffer, (u64)Descriptor->PhysicalStart, 16);
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            u"\r\nPhysical: ");
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            Buffer);
+        
+        U64_ToStr(Buffer, (u64)Descriptor->VirtualStart, 16);
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            u"\r\nVirtual: ");
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            Buffer);
+        
+        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+            u"\r\n\n");
+    }
+    Status = BootServices->FreePool(MemoryMap);
+    
+    // Mem_Set(&Context, 0, sizeof(context));
+    // Context.PrevContext = (context*)&Context.PrevContext;
     
     /* handle relocations */
-    s32 RelTotalSize = 0;
-    s32 RelEntrySize = 0;
-    elf64_relocation *Rel = 0;
-    for(u32 I = 0; Dynamics[I].Tag != DT_NULL; I++) {
-        switch(Dynamics[I].Tag) {
-            case DT_RELA: {
-                Rel = (elf64_relocation*)((u32)Dynamics[I].Address + LoadBase);
-            } break;
+    // s32 RelTotalSize = 0;
+    // s32 RelEntrySize = 0;
+    // elf64_relocation *Rel = 0;
+    // for(u32 I = 0; Dynamics[I].Tag != DT_NULL; I++) {
+    //     switch(Dynamics[I].Tag) {
+    //         case DT_RELA: {
+    //             Rel = (elf64_relocation*)((u32)Dynamics[I].Address + LoadBase);
+    //         } break;
             
-            case DT_RELASZ: {
-                RelTotalSize = Dynamics[I].Address;
-            } break;
+    //         case DT_RELASZ: {
+    //             RelTotalSize = Dynamics[I].Address;
+    //         } break;
             
-            case DT_RELAENT: {
-                RelEntrySize = Dynamics[I].Address;
-            } break;
-        }
-    }
-    if(Rel && RelEntrySize) {
-        while(RelTotalSize > 0) {
-            if(ELF64_R_TYPE(Rel->Info) == R_X86_64_RELATIVE) {
-                u64 *Address = (u64*)(LoadBase + Rel->Offset);
-                *Address += LoadBase;
-            }
-            Rel = (elf64_relocation*)((u08*)Rel + RelEntrySize);
-            RelTotalSize -= RelEntrySize;
-        }
-    }
+    //         case DT_RELAENT: {
+    //             RelEntrySize = Dynamics[I].Address;
+    //         } break;
+    //     }
+    // }
+    // if(Rel && RelEntrySize) {
+    //     while(RelTotalSize > 0) {
+    //         if(ELF64_R_TYPE(Rel->Info) == R_X86_64_RELATIVE) {
+    //             u64 *Address = (u64*)(LoadBase + Rel->Offset);
+    //             *Address += LoadBase;
+    //         }
+    //         Rel = (elf64_relocation*)((u08*)Rel + RelEntrySize);
+    //         RelTotalSize -= RelEntrySize;
+    //     }
+    // }
     
+    #if 0
     // Make sure SSE is enabled
     asm volatile (
     "movq %cr0, %rax  \n"
@@ -315,37 +215,162 @@ EFI_Entry(u64 LoadBase,
     "orw $3 << 9, %ax \n"
     "mov %rax, %cr4   \n"
     );
+    #endif
     
-    
+    SystemTable->ConsoleOut->Reset(SystemTable->ConsoleOut, FALSE);
     
     efi_loaded_image_protocol *LoadedImage = NULL;
-    Status = SystemTable->BootServices->HandleProtocol(ImageHandle, &EFI_GUID_LOADED_IMAGE_PROTOCOL, (vptr*)&LoadedImage);
-    Assert(Status == EFI_Status_Success);
+    Status = BootServices->HandleProtocol(ImageHandle, &EFI_GUID_LOADED_IMAGE_PROTOCOL, (vptr*)&LoadedImage);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not load LoadedImage Protocol\r\n");
+    
+    c16 Buffer[35];
+    Buffer[34] = 0;
+    u32 Index = 33;
+    u64 Value = (u64)LoadedImage->ImageBase;
+    do {
+        u08 Digit = Value % 16;
+        if(Digit < 10) Buffer[Index--] = Digit    + L'0';
+        else           Buffer[Index--] = Digit-10 + L'A';
+    } while(Value /= 16);
+    Buffer[Index--] = L'x';
+    Buffer[Index] = L'0';
+    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+        u"NOTE: Loader image base is at ");
+    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+        (c16*)Buffer+Index);
+    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+        u"\r\n");
+    
+    //
+    // Load the kernel
+    //
+    efi_simple_file_system_protocol *SFSP = 0;
+    Status = BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_GUID_SIMPLE_FILE_SYSTEM_PROTOCOL, (vptr)&SFSP);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not load SimpleFileSystem Protocol\r\n");
+    
+    efi_file_protocol *Volume = 0;
+    Status = SFSP->OpenVolume(SFSP, &Volume);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not open EFI volume\r\n");
+    
+    efi_file_protocol *FileHandle = 0;
+    Status = Volume->Open(Volume, &FileHandle, L"\\kernel", EFI_FileMode_Read, 0);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not open kernel file\r\n");
+    
+    u64 FileInfoSize = 0;
+    Status = FileHandle->GetInfo(FileHandle, &EFI_GUID_FILE_INFO, &FileInfoSize, NULL);
+    SASSERT(EFI_Status_BufferTooSmall, u"ERROR: Could not get kernel file size\r\n");
+    
+    efi_file_info *FileInfo = 0;
+    Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, FileInfoSize, (vptr*)&FileInfo);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not allocate kernel file info\r\n");
+    Status = FileHandle->GetInfo(FileHandle, &EFI_GUID_FILE_INFO, &FileInfoSize, FileInfo);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not get kernel file info\r\n");
+    u64 FileSize = FileInfo->FileSize;
+    Status = BootServices->FreePool(FileInfo);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not free kernel file info\r\n");
+    
+    u08 *FileData = 0;
+    Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, FileSize, (vptr*)&FileData);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not allocate kernel file\r\n");
+    Status = FileHandle->Read(FileHandle, &FileSize, FileData);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not read kernel file\r\n");
+    
+    Status = FileHandle->Close(FileHandle);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not close kernel file\r\n");
+    
+    elf64_header *ELFHeader = (vptr)FileData;
+    // TODO Validate the header
+    
+    elf64_program_header *ProgramHeaders = (vptr)(FileData + ELFHeader->ProgramHeaderOffset);
+    u64 MinAddress = U64_MAX;
+    u64 MaxAddress = 0;
+    for(u32 I = 0; I < ELFHeader->ProgramHeaderCount; I++) {
+        elf64_program_header *Header = ProgramHeaders+I;
+        if(Header->Type == ELF_ProgramHeaderType_Load) {
+            if(MinAddress > Header->VirtualAddress)
+                MinAddress = Header->VirtualAddress;
+            if(MaxAddress < Header->VirtualAddress+Header->SizeInMemory)
+                MaxAddress = Header->VirtualAddress+Header->SizeInMemory;
+        }
+    }
+    
+    u64 PageCount = (MaxAddress-MinAddress + PAGE_SIZE-1) / PAGE_SIZE;
+    Status = BootServices->AllocatePages(EFI_AllocateType_AnyPages, EFI_MemoryType_LoaderData, PageCount, (vptr*)&MinAddress);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not allocate pages for kernel\r\n");
+    
+    for(u32 I = 0; I < ELFHeader->ProgramHeaderCount; I++) {
+        elf64_program_header *Header = ProgramHeaders+I;
+        if(Header->Type == ELF_ProgramHeaderType_Load) {
+            u64 *Dest64, *Src64;
+            u08 *Dest08, *Src08;
+            Header->SizeInMemory -= Header->SizeInFile;
+            
+            Dest64 = (vptr)(Header->VirtualAddress + MinAddress);
+            Src64 = (vptr)(FileData + Header->Offset);
+            while(Header->SizeInFile >= 8) {
+                *Dest64++ = *Src64++;
+                Header->SizeInFile -= 8;
+            }
+            Dest08 = (u08*)Dest64;
+            Src08 = (u08*)Src64;
+            while(Header->SizeInFile) {
+                *Dest08++ = *Src08++;
+                Header->SizeInFile--;
+            }
+            while(Header->SizeInMemory && ((u64)Dest08 & 0b00111111)) {
+                *Dest08++ = 0;
+                Header->SizeInMemory--;
+            }
+            Dest64 = (u64*)Dest08;
+            while(Header->SizeInMemory >= 8) {
+                *Dest64++ = 0;
+                Header->SizeInMemory -= 8;
+            }
+            Dest08 = (u08*)Dest64;
+            while(Header->SizeInMemory) {
+                *Dest08++ = 0;
+                Header->SizeInMemory--;
+            }
+        }
+    }
+    
+    u64 KernelEntryAddress = MinAddress + ELFHeader->Entry;
+    Status = BootServices->FreePool(FileData);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not free kernel file\r\n");
+    
+    Index = 33;
+    Value = KernelEntryAddress;
+    do {
+        u08 Digit = Value % 16;
+        if(Digit < 10) Buffer[Index--] = Digit    + L'0';
+        else           Buffer[Index--] = Digit-10 + L'A';
+    } while(Value /= 16);
+    Buffer[Index--] = L'x';
+    Buffer[Index] = L'0';
+    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+        u"NOTE: Kernel entry point is at ");
+    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+        (c16*)Buffer+Index);
+    SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
+        u"\n");
     
     
     
-    // idt IDT = {0};
-    // WriteIDTR(&IDT, sizeof(idt));
-    // IDT.Entries[Interrupt_Test].OffsetP1 = (u16)(u64)InterruptHandler_Test;
-    // IDT.Entries[Interrupt_Test].OffsetP2 = (u16)((u64)InterruptHandler_Test >> 16);
-    // IDT.Entries[Interrupt_Test].OffsetP3 = (u32)((u64)InterruptHandler_Test >> 32);
-    // IDT.Entries[Interrupt_Test].SegmentSelector = 1 << 3;
-    
-    
+    #if 0
     //
     // Memory
     //
     vptr MemBase;
     u64 StackSize = 64 * 1024 * 1024;
-    Status = SystemTable->BootServices->AllocatePool(LoadedImage->ImageDataType, StackSize, &MemBase);
+    Status = BootServices->AllocatePool(LoadedImage->ImageDataType, StackSize, &MemBase);
     Assert(Status == EFI_Status_Success);
     Context.Stack = Stack_Init(MemBase, StackSize);
     Context.Allocate = Stack_Allocate;
     
     u64 MemoryMapSize, MemoryDescriptorSize;
-    Status = SystemTable->BootServices->GetMemoryMap(&MemoryMapSize, NULL, NULL, &MemoryDescriptorSize, NULL);
+    Status = BootServices->GetMemoryMap(&MemoryMapSize, NULL, NULL, &MemoryDescriptorSize, NULL);
     efi_memory_descriptor *MemoryMap = Context.Allocate(MemoryMapSize);
-    Status = SystemTable->BootServices->GetMemoryMap(&MemoryMapSize, MemoryMap, NULL, NULL, NULL);
+    Status = BootServices->GetMemoryMap(&MemoryMapSize, MemoryMap, NULL, NULL, NULL);
     u32 MemoryDescriptorCount = MemoryMapSize / MemoryDescriptorSize;
     
     // PageDirPtrTbl[0] = (u64)PageDir | 1
@@ -359,26 +384,11 @@ EFI_Entry(u64 LoadBase,
     // PageDirectory[0] = (u32)(u64)(u32*)PageTable | 3;
     
     //
-    // Graphics
-    //
-    u64 SizeOfGOPInfo;
-    efi_graphics_output_protocol *GOP;
-    efi_graphics_output_mode_information *Info;
-    efi_guid GOPGUID = EFI_GUID_GRAPHICS_OUTPUT_PROTOCOL;
-    Status = SystemTable->BootServices->LocateProtocol(&GOPGUID, NULL, (vptr*)&GOP);
-    Assert(Status == EFI_Status_Success);
-    Status = GOP->QueryMode(GOP, (GOP->Mode == NULL) ? 0 : GOP->Mode->Mode, &SizeOfGOPInfo, &Info);
-    Assert(Status == EFI_Status_Success);
-    Context.FramebufferSize = GOP->Mode->FrameBufferSize;
-    Context.Framebuffer = (u32*)GOP->Mode->FrameBufferBase;
-    
-    
-    //
     // Files
     //
     efi_file_protocol *Volume = NULL;
     efi_simple_file_system_protocol *SFSP = NULL;
-    Status = SystemTable->BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_GUID_SIMPLE_FILE_SYSTEM_PROTOCOL, (vptr)&SFSP);
+    Status = BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_GUID_SIMPLE_FILE_SYSTEM_PROTOCOL, (vptr)&SFSP);
     Assert(Status == EFI_Status_Success);
     Status = SFSP->OpenVolume(SFSP, &Volume);
     Assert(Status == EFI_Status_Success);
@@ -532,18 +542,35 @@ EFI_Entry(u64 LoadBase,
     GOP->Blt(GOP, (efi_graphics_output_blt_pixel*)Framebuffer, EFI_GraphicsOutputBltOperation_BufferToVideo, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
     
     
-    SystemTable->BootServices->FreePool(Context.Stack);
+    BootServices->FreePool(Context.Stack);
+    
+    #endif
     
     
-    u64 MemoryMapKey;
-    Status = SystemTable->BootServices->GetMemoryMap(NULL, NULL, &MemoryMapKey, NULL, NULL);
-    SystemTable->BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
+    efi_graphics_output_protocol *GOP;
+    efi_guid GOPGUID = EFI_GUID_GRAPHICS_OUTPUT_PROTOCOL;
+    Status = BootServices->LocateProtocol(&GOPGUID, NULL, (vptr*)&GOP);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not load GraphicsOutput Protocol\r\n");
     
     
     
+    u64 MemoryMapKey,MemoryMapSize;
+    Status = BootServices->GetMemoryMap(&MemoryMapSize, NULL, &MemoryMapKey, NULL, NULL);
+    Status = BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not exit boot services\n");
+    
+    Status = ((kernel_entry)KernelEntryAddress)(GOP);
+    
+    return Status ? EFI_Status_Aborted : EFI_Status_Success;
+    
+    
+    #undef SASSERT
+    #undef ASSERT
+    
+    _error:
     b08 Wait = TRUE;
     while(Wait)
         asm ("pause");
     
-    return EFI_Status_Success;
+    return Status;
 }

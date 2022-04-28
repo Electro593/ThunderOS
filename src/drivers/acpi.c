@@ -7,6 +7,8 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
 typedef enum acpi_iapc_boot_arch_flags {
     IAPCBootArch_LegacyDevices     = (1<<0),
     IAPCBootArch_8042              = (1<<1),
@@ -181,6 +183,12 @@ typedef struct acpi {
     acpi_xsdt *XSDT;
 } acpi;
 
+#endif
+
+
+
+#ifdef INCLUDE_SOURCE
+
 internal b08
 ValidateRSDP(acpi_rsdp *RSDP)
 {
@@ -284,3 +292,5 @@ InitInterrupts(acpi ACPI)
     GDT.Entries[2].Attributes = 0b00000000;
     WriteGDTR(&GDT, sizeof(gdt));
 }
+
+#endif
