@@ -13,20 +13,20 @@ default rel
 
 [global DisableInterrupts]
 [global EnableInterrupts]
-; [global PortIn08]
+[global PortIn08]
 ; [global PortIn16]
 ; [global PortIn32]
 [global PortOut08]
 ; [global PortOut16]
 ; [global PortOut32]
-; [global WriteGDTR]
+[global WriteGDTR]
 ; [global WriteIDTR]
 
-; PortIn08:
-;     mov rdx, rdi
-;     xor rax, rax
-;     in  al,  dx
-;     ret
+PortIn08:
+    mov rdx, rdi
+    xor rax, rax
+    in  al,  dx
+    ret
 
 ; PortIn16:
 ;     mov rdx, rdi
@@ -58,16 +58,16 @@ PortOut08:
 ;     out dx,  eax
 ;     ret
 
-; gdtr dw 0
-;      dq 0
-; WriteGDTR:
-;     mov  rdx, rdi
-;     mov  [gdtr + 2], rdx
-;     mov  rax, rsi
-;     dec  ax
-;     mov  [gdtr], ax
-;     lgdt [gdtr]
-;     ret
+gdtr dw 0
+     dq 0
+WriteGDTR:
+    mov  rdx, rdi
+    mov  [gdtr + 2], rdx
+    mov  rax, rsi
+    dec  ax
+    mov  [gdtr], ax
+    lgdt [gdtr]
+    ret
 
 ; idtr dw 0
 ;      dq 0

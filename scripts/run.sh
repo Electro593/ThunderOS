@@ -8,5 +8,6 @@ qemu-system-x86_64 -cpu qemu64 \
                    -bios ./emulator/OVMF.fd               \
                    -drive if=ide,file=./emulator/disk.vhd \
                    -device qemu-xhci,id=xhci \
+                   -serial file:CON \
                    -m 1G \
                    -s -S

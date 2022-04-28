@@ -12,28 +12,27 @@
 
 extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
-// extern u08  PortIn08(u16 Address);
+extern u08  PortIn08(u16 Address);
 // extern u16  PortIn16(u16 Address);
 // extern u32  PortIn32(u16 Address);
 extern void PortOut08(u16 Address, u08 Data);
 // extern void PortOut16(u16 Address, u16 Data);
 // extern void PortOut32(u16 Address, u32 Data);
-// extern void WriteGDTR(gdt *GDT, u16 Size);
+extern void WriteGDTR(gdt *GDT, u16 Size);
 // extern void WriteIDTR(idt *IDT, u16 Size);
 
-typedef enum io_ports {
-    // Port_PIC1_Command = 0x20,
-    // Port_PIC1_Data    = 0x21,
-    // Port_PIC2_Command = 0xA0,
-    // Port_PIC2_Data    = 0xA1,
-    // Port_PS2_Data     = 0x60,
-    // Port_PS2_Status   = 0x64,
-    // Port_PS2_Command  = 0x64,
-    Port_Serial_COM1   = 0x3F8,
-} io_ports;
 // #define PortWait PortOut08(0x80, 0);
 
+typedef enum thunderos_status {
+   ST_Success,
+} thunderos_status;
+
+typedef enum thunderos_flags {
+   HW_HasSerial
+} thunderos_flags;
+
 #include <drivers/serial.c>
+#include <drivers/gdt.c>
 
 #if 0
 
@@ -258,12 +257,20 @@ InitGOP(efi_graphics_output_protocol *GOP)
 }
 
 external u32
-KernelEntry(efi_graphics_output_protocol *GOP)
+Kernel_Entry(efi_graphics_output_protocol *GOP)
 {
+   u32 Status;
+   u64 Flags = 0;
+   
    DisableInterrupts();
    
    InitGOP(GOP);
    
+   u16 SerialPort;
+   Status = InitSerial(38400, &SerialPort);
+   if(Status == ST_Success) {
+      Flags |= HW_HasSerial;
+   }
    
    EnableInterrupts();
    

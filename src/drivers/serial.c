@@ -7,16 +7,40 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-internal void
-InitSerial(void)
+internal u32
+Serial_Init(u32 BaudRate, u16 *Port)
 {
-   PortOut08(Port_Serial_COM1+1, 0);
-   
-   u08 LineControl = 0b00000011;
-   PortOut08(Port_Serial_COM1+3, 0x80|LineControl);
-   PortOut08(Port_Serial_COM1+0, 3);
-   PortOut08(Port_Serial_COM1+1, 0);
-   PortOut08(Port_Serial_COM1+3, LineControl);
-   
-   PortOut08(Port_Serial_COM1+1, Serial_Interrupt_All);
+   u16 Ports[] = {0x3F8,0x2F8,0x3E8,0x2E8,0x5F8,0x4F8,0x5E8,0x4E8};
+   for(u32 I = 0; I < 7; I++) {
+      PortOut08(Ports[I]+1, 0);
+      PortOut08(Ports[I]+3, 0x80);
+      PortOut08(Ports[I]+0, 115200/BaudRate);
+      PortOut08(Ports[I]+1, 0);
+      PortOut08(Ports[I]+3, 0x03);
+      PortOut08(Ports[I]+2, 0xC7);
+      PortOut08(Ports[I]+4, 0x0B);
+      
+      PortOut08(Ports[I]+4, 0x1E);
+      PortOut08(Ports[I]+0, 0xAE);
+      if(PortIn08(Ports[I]+0) == 0xAE) {
+         PortOut08(Ports[I]+4, 0x0F);
+         *Port = Ports[I];
+         return TRUE;
+      }
+   }
+   return FALSE;
+}
+
+internal void
+Serial_Read(u16 Port, c08 *Char)
+{
+   while(!(PortIn08(Port+5) & 0x01));
+   *Char = PortIn(Port+0);
+}
+
+internal void
+Serial_Write(u16 Port, c08 Char)
+{
+   while(!(PortIn08(Port+5) & 0x20));
+   PortOut08(Port+0, Char);
 }
