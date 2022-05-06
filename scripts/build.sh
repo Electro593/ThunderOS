@@ -1,3 +1,5 @@
+if true; then
+
 ARCH=$(uname -m | sed s,i[3456789]86,ia32,)
 
 if [ ! -d build ]; then
@@ -6,8 +8,8 @@ fi
 
 
 
-CFLAGS="-fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Wno-builtin-declaration-mismatch -fomit-frame-pointer -fno-asynchronous-unwind-tables -mno-red-zone"
-CFLAGS="-Wall -Wextra -fshort-wchar -Isrc"
+CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Wno-builtin-declaration-mismatch -fomit-frame-pointer -fno-asynchronous-unwind-tables -mno-red-zone"
+CFLAGS="$CFLAGS -Isrc -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-braces -Wno-sign-compare"
 CFLAGS="$CFLAGS -ggdb3"
 # CFLAGS="$CFLAGS -Ofast -fno-tree-slp-vectorize"
 # CFLAGS="$CFLAGS -ggdb3"
@@ -18,13 +20,13 @@ gcc $CFLAGS -c src/kernel/kernel.c -o build/kernel.o
 
 
 
-nasm -g -f elf64 src/kernel/x64.asm -o build/asm.o
+nasm -g -f elf64 src/kernel/x64.s -o build/asm.o
 
 
 
-LFLAGS="-nostdlib -shared -Bsymbolic"
-ld $LFLAGS -Tscripts/elf_${ARCH}_efi.lds build/loader.o -o build/loader.so
-ld $LFLAGS -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel
+LFLAGS="-nostdlib -Bsymbolic"
+ld $LFLAGS -shared -Tscripts/elf_${ARCH}_efi.lds build/loader.o -o build/loader.so
+ld $LFLAGS -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel
 
 if [ $ARCH = "aarch64" ]; then
     EFIARCH="pei-aarch64-little"
@@ -36,11 +38,11 @@ SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_
 objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 build/loader.so build/loader_dbg
 objcopy $SECTIONS     --target $EFIARCH --subsystem=10 build/loader.so build/loader
 
-strip -R .note* build/kernel
-strip -R .comment build/kernel
+# strip -R .note* build/kernel
+# strip -R .comment build/kernel
 
-objdump -l -S -d --source-comment build/loader.so > build/loader.asm
-objdump -l -S -d --source-comment build/kernel > build/kernel.asm
+objdump -l -S -d --source-comment build/loader.so > build/loader.s
+objdump -l -S -d --source-comment build/kernel > build/kernel.s
 objdump --all-headers build/loader_dbg > build/loader.dump
 objdump --all-headers build/kernel > build/kernel.dump
 
@@ -60,3 +62,17 @@ sudo cp build/loader /mnt/EFI/BOOT/BOOTX64.efi
 sudo cp build/kernel /mnt/kernel
 sudo umount /dev/nbd0p1
 sudo qemu-nbd -d /dev/nbd0
+
+else
+
+pushd ~/Downloads/mosquitos-master
+tup
+sudo qemu-nbd -c /dev/nbd0 ~/Programming/ThunderOS/emulator/disk.vhd
+sudo mount -t auto -o rw /dev/nbd0p1 /mnt
+sudo cp build/bootloader /mnt/EFI/BOOT/BOOTX64.efi
+sudo cp build/kernel /mnt/kernel
+sudo umount /dev/nbd0p1
+sudo qemu-nbd -d /dev/nbd0
+popd
+
+fi

@@ -8,9 +8,6 @@
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #include <shared.h>
-
-#define INCLUDE_HEADER
-#define INCLUDE_SOURCE
 #include <kernel/elf.h>
 
 // CREDIT: POSIX-UEFI
@@ -70,9 +67,12 @@ asm (
 "         jmp *0x38(%rdi)       \n"
 );
 
-// #include <kernel/kernel.c>
-#include <kernel/efi.h>
-typedef u32 (*kernel_entry)(efi_graphics_output_protocol *GOP);
+#define INCLUDE_HEADER
+    #include <kernel/efi.h>
+    #include <drivers/acpi.c>
+#undef INCLUDE_HEADER
+
+typedef u32 (*kernel_entry)(rsdp *RSDP, efi_graphics_output_protocol *GOP);
 
 internal void
 U64_ToStr(c16 *Buffer, u64 N, u32 Radix) {
@@ -126,97 +126,6 @@ EFI_Entry(u64 LoadBase,
     #define SASSERT(DesiredStatus, Message) \
         ASSERT(DesiredStatus == Status, Message)
     
-    u64 _MemoryMapSize, MemoryDescriptorSize;
-    Status = BootServices->GetMemoryMap(&_MemoryMapSize, NULL, NULL, &MemoryDescriptorSize, NULL);
-    efi_memory_descriptor *MemoryMap;
-    Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, _MemoryMapSize*2, (vptr*)&MemoryMap);
-    SASSERT(EFI_Status_Success, u"Failed to allocate pool for memory map\r\n");
-    Status = BootServices->GetMemoryMap(&_MemoryMapSize, MemoryMap, NULL, NULL, NULL);
-    u32 MemoryDescriptorCount = _MemoryMapSize / MemoryDescriptorSize;
-    for(u32 I = 0; I < MemoryDescriptorCount; I++) {
-        efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + I*MemoryDescriptorSize);
-        c16 Buffer[35];
-        
-        U64_ToStr(Buffer, Descriptor->Attribute, 10);
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            u"Attribute: ");
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            Buffer);
-        
-        U64_ToStr(Buffer, Descriptor->Type, 10);
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            u"\r\nType: ");
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            Buffer);
-        
-        U64_ToStr(Buffer, Descriptor->PageCount, 10);
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            u"\r\nPageCount: ");
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            Buffer);
-        
-        U64_ToStr(Buffer, (u64)Descriptor->PhysicalStart, 16);
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            u"\r\nPhysical: ");
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            Buffer);
-        
-        U64_ToStr(Buffer, (u64)Descriptor->VirtualStart, 16);
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            u"\r\nVirtual: ");
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            Buffer);
-        
-        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-            u"\r\n\n");
-    }
-    Status = BootServices->FreePool(MemoryMap);
-    
-    // Mem_Set(&Context, 0, sizeof(context));
-    // Context.PrevContext = (context*)&Context.PrevContext;
-    
-    /* handle relocations */
-    // s32 RelTotalSize = 0;
-    // s32 RelEntrySize = 0;
-    // elf64_relocation *Rel = 0;
-    // for(u32 I = 0; Dynamics[I].Tag != DT_NULL; I++) {
-    //     switch(Dynamics[I].Tag) {
-    //         case DT_RELA: {
-    //             Rel = (elf64_relocation*)((u32)Dynamics[I].Address + LoadBase);
-    //         } break;
-            
-    //         case DT_RELASZ: {
-    //             RelTotalSize = Dynamics[I].Address;
-    //         } break;
-            
-    //         case DT_RELAENT: {
-    //             RelEntrySize = Dynamics[I].Address;
-    //         } break;
-    //     }
-    // }
-    // if(Rel && RelEntrySize) {
-    //     while(RelTotalSize > 0) {
-    //         if(ELF64_R_TYPE(Rel->Info) == R_X86_64_RELATIVE) {
-    //             u64 *Address = (u64*)(LoadBase + Rel->Offset);
-    //             *Address += LoadBase;
-    //         }
-    //         Rel = (elf64_relocation*)((u08*)Rel + RelEntrySize);
-    //         RelTotalSize -= RelEntrySize;
-    //     }
-    // }
-    
-    #if 0
-    // Make sure SSE is enabled
-    asm volatile (
-    "movq %cr0, %rax  \n"
-    "andb $0xF1, %al  \n"
-    "movq %rax, %cr0  \n"
-    "movq %cr4, %rax  \n"
-    "orw $3 << 9, %ax \n"
-    "mov %rax, %cr4   \n"
-    );
-    #endif
-    
     SystemTable->ConsoleOut->Reset(SystemTable->ConsoleOut, FALSE);
     
     efi_loaded_image_protocol *LoadedImage = NULL;
@@ -224,20 +133,11 @@ EFI_Entry(u64 LoadBase,
     SASSERT(EFI_Status_Success, u"ERROR: Could not load LoadedImage Protocol\r\n");
     
     c16 Buffer[35];
-    Buffer[34] = 0;
-    u32 Index = 33;
-    u64 Value = (u64)LoadedImage->ImageBase;
-    do {
-        u08 Digit = Value % 16;
-        if(Digit < 10) Buffer[Index--] = Digit    + L'0';
-        else           Buffer[Index--] = Digit-10 + L'A';
-    } while(Value /= 16);
-    Buffer[Index--] = L'x';
-    Buffer[Index] = L'0';
+    U64_ToStr(Buffer, (u64)LoadedImage->ImageBase, 16);
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
         u"NOTE: Loader image base is at ");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-        (c16*)Buffer+Index);
+        Buffer);
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
         u"\r\n");
     
@@ -295,7 +195,9 @@ EFI_Entry(u64 LoadBase,
     }
     
     u64 PageCount = (MaxAddress-MinAddress + PAGE_SIZE-1) / PAGE_SIZE;
-    Status = BootServices->AllocatePages(EFI_AllocateType_AnyPages, EFI_MemoryType_LoaderData, PageCount, (vptr*)&MinAddress);
+    // Status = BootServices->AllocatePages(EFI_AllocateType_AnyPages, EFI_MemoryType_LoaderData, PageCount, (vptr*)&MinAddress);
+    MinAddress = 4096;
+    Status = BootServices->AllocatePages(EFI_AllocateType_Address, EFI_MemoryType_LoaderData, PageCount, (vptr*)&MinAddress);
     SASSERT(EFI_Status_Success, u"ERROR: Could not allocate pages for kernel\r\n");
     
     for(u32 I = 0; I < ELFHeader->ProgramHeaderCount; I++) {
@@ -338,19 +240,11 @@ EFI_Entry(u64 LoadBase,
     Status = BootServices->FreePool(FileData);
     SASSERT(EFI_Status_Success, u"ERROR: Could not free kernel file\r\n");
     
-    Index = 33;
-    Value = KernelEntryAddress;
-    do {
-        u08 Digit = Value % 16;
-        if(Digit < 10) Buffer[Index--] = Digit    + L'0';
-        else           Buffer[Index--] = Digit-10 + L'A';
-    } while(Value /= 16);
-    Buffer[Index--] = L'x';
-    Buffer[Index] = L'0';
+    U64_ToStr(Buffer, KernelEntryAddress, 16);
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
         u"NOTE: Kernel entry point is at ");
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-        (c16*)Buffer+Index);
+        Buffer);
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
         u"\n");
     
@@ -364,8 +258,8 @@ EFI_Entry(u64 LoadBase,
     u64 StackSize = 64 * 1024 * 1024;
     Status = BootServices->AllocatePool(LoadedImage->ImageDataType, StackSize, &MemBase);
     Assert(Status == EFI_Status_Success);
-    Context.Stack = Stack_Init(MemBase, StackSize);
-    Context.Allocate = Stack_Allocate;
+    Context.Stack = Linear_Init(MemBase, StackSize);
+    Context.Allocate = Linear_Allocate;
     
     u64 MemoryMapSize, MemoryDescriptorSize;
     Status = BootServices->GetMemoryMap(&MemoryMapSize, NULL, NULL, &MemoryDescriptorSize, NULL);
@@ -501,28 +395,6 @@ EFI_Entry(u64 LoadBase,
     }
     
     
-    //
-    // ACPI
-    //
-    acpi_rsdp *RSDP = NULL;
-    {
-        efi_configuration_table *ConfigTable = SystemTable->ConfigTable;
-        for(u32 Index = 0; Index < SystemTable->ConfigTableEntryCount; ++Index)
-        {
-            if(*(u64*)&ConfigTable->VendorGuid.Data1 == *(u64*)&EFI_GUID_ACPI_TABLE_2_0.Data1 &&
-               *(u64*)&ConfigTable->VendorGuid.Data4 == *(u64*)&EFI_GUID_ACPI_TABLE_2_0.Data4) {
-                RSDP = ConfigTable->VendorTable;
-            }
-            
-            ++ConfigTable;
-        }
-    }
-    
-    acpi ACPI = InitACPI(RSDP);
-    // InitInterrupts(ACPI);
-    
-    
-    
     
     // InitPS2Controller(ACPI);
     // DetectPS2Device();
@@ -546,6 +418,15 @@ EFI_Entry(u64 LoadBase,
     
     #endif
     
+    rsdp *RSDP = NULL;
+    for(u32 I = 0; I < SystemTable->ConfigTableEntryCount; I++) {
+        efi_configuration_table ConfigTable = SystemTable->ConfigTable[I];
+        if(*(u64*)&ConfigTable.VendorGuid.Data1 == *(u64*)&EFI_GUID_ACPI_TABLE_2_0.Data1 &&
+           *(u64*)&ConfigTable.VendorGuid.Data4 == *(u64*)&EFI_GUID_ACPI_TABLE_2_0.Data4) {
+            RSDP = ConfigTable.VendorTable;
+        }
+    }
+    
     
     efi_graphics_output_protocol *GOP;
     efi_guid GOPGUID = EFI_GUID_GRAPHICS_OUTPUT_PROTOCOL;
@@ -553,15 +434,13 @@ EFI_Entry(u64 LoadBase,
     SASSERT(EFI_Status_Success, u"ERROR: Could not load GraphicsOutput Protocol\r\n");
     
     
-    
     u64 MemoryMapKey,MemoryMapSize;
     Status = BootServices->GetMemoryMap(&MemoryMapSize, NULL, &MemoryMapKey, NULL, NULL);
     Status = BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
     SASSERT(EFI_Status_Success, u"ERROR: Could not exit boot services\n");
     
-    Status = ((kernel_entry)KernelEntryAddress)(GOP);
-    
-    return Status ? EFI_Status_Aborted : EFI_Status_Success;
+    Status = ((kernel_entry)KernelEntryAddress)(RSDP, GOP);
+    return Status;
     
     
     #undef SASSERT

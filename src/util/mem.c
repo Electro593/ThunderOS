@@ -7,6 +7,17 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
+// typedef struct stack {
+//     u64 Size;
+//     vptr *FirstMarker;
+//     u08 *Cursor;
+// } stack;
+
+#endif
+
+#ifdef INCLUDE_SOURCE
 
 internal vptr
 Mem_Set(vptr Dest,
@@ -15,21 +26,22 @@ Mem_Set(vptr Dest,
 {
     u08 *Dest08 = (u08*)Dest;
     
-    u64 ToAlign = (16 - ((u64)Dest & 15)) & 16;
+    u64 ToAlign = (8 - ((u64)Dest & 7)) & 8;
     Size -= ToAlign;
     while(ToAlign) {
         *Dest08++ = Data;
         ToAlign--;
     }
     
-    u128 *Dest128 = (u128*)Dest;
-    u128 Data128 = U128_Set_1x8(Data);
-    while(Size >= 16) {
-        *Dest128++ = Data128;
-        Size -= 16;
+    // TODO: Check for SSE
+    u64 *Dest64 = (u64*)Dest;
+    u64 Data64 = ((u64)Data<<56)|((u64)Data<<48)|((u64)Data<<40)|((u64)Data<<32)|((u64)Data<<24)|((u64)Data<<16)|((u64)Data<<8)|Data;
+    while(Size >= 8) {
+        *Dest64++ = Data64;
+        Size -= 8;
     }
     
-    Dest08 = (u08*)Dest128;
+    Dest08 = (u08*)Dest64;
     while(Size) {
         *Dest08++ = Data;
         Size--;
@@ -164,43 +176,39 @@ Mem_BytesUntil(u08 Byte, vptr Data)
 
 
 
-typedef struct stack {
-    u64 Size;
-    vptr *FirstMarker;
-    u08 *Cursor;
-} stack;
+// internal stack *
+// Linear_Init(vptr Mem,
+//            u64 Size)
+// {
+//     stack *Result = Mem;
+//     Result->Size = Size - sizeof(stack);
+//     Result->FirstMarker = (vptr*)&Result->FirstMarker;
+//     Result->Cursor = (u08*)Mem + sizeof(stack) + sizeof(vptr);
+//     return Result;
+// }
 
-internal stack *
-Stack_Init(vptr Mem,
-           u64 Size)
-{
-    stack *Result = Mem;
-    Result->Size = Size - sizeof(stack);
-    Result->FirstMarker = (vptr*)&Result->FirstMarker;
-    Result->Cursor = (u08*)Mem + sizeof(stack) + sizeof(vptr);
-    return Result;
-}
+// internal void
+// Linear_Push(void)
+// {
+//     vptr *Marker = (vptr*)Context.Stack->Cursor; // ... [OldMarker]    [NewMarker]
+//     *Marker = Context.Stack->FirstMarker;        // ... [OldMarker] <- [NewMarker]
+//     Context.Stack->FirstMarker = Marker;         // ... [OldMarker] <- [NewMarker] <- [Header]
+//     Context.Stack->Cursor += sizeof(vptr);
+// }
 
-internal void
-Stack_Push(void)
-{
-    vptr *Marker = (vptr*)Context.Stack->Cursor; // ... [OldMarker]    [NewMarker]
-    *Marker = Context.Stack->FirstMarker;        // ... [OldMarker] <- [NewMarker]
-    Context.Stack->FirstMarker = Marker;         // ... [OldMarker] <- [NewMarker] <- [Header]
-    Context.Stack->Cursor += sizeof(vptr);
-}
+// internal vptr
+// Linear_Allocate(u64 Size)
+// {
+//     vptr Result = Context.Stack->Cursor;
+//     Context.Stack->Cursor += Size;
+//     return Result;
+// }
 
-internal vptr
-Stack_Allocate(u64 Size)
-{
-    vptr Result = Context.Stack->Cursor;
-    Context.Stack->Cursor += Size;
-    return Result;
-}
+// internal void
+// Linear_Pop(void)
+// {
+//     Context.Stack->FirstMarker = *Context.Stack->FirstMarker;
+//     Context.Stack->Cursor = (u08*)Context.Stack->FirstMarker + sizeof(vptr);
+// }
 
-internal void
-Stack_Pop(void)
-{
-    Context.Stack->FirstMarker = *Context.Stack->FirstMarker;
-    Context.Stack->Cursor = (u08*)Context.Stack->FirstMarker + sizeof(vptr);
-}
+#endif

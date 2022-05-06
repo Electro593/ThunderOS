@@ -7,6 +7,8 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_SOURCE
+
 internal u32
 Serial_Init(u32 BaudRate, u16 *Port)
 {
@@ -25,17 +27,17 @@ Serial_Init(u32 BaudRate, u16 *Port)
       if(PortIn08(Ports[I]+0) == 0xAE) {
          PortOut08(Ports[I]+4, 0x0F);
          *Port = Ports[I];
-         return TRUE;
+         return ST_Success;
       }
    }
-   return FALSE;
+   return ST_NotSupported;
 }
 
 internal void
 Serial_Read(u16 Port, c08 *Char)
 {
    while(!(PortIn08(Port+5) & 0x01));
-   *Char = PortIn(Port+0);
+   *Char = PortIn08(Port+0);
 }
 
 internal void
@@ -44,3 +46,5 @@ Serial_Write(u16 Port, c08 Char)
    while(!(PortIn08(Port+5) & 0x20));
    PortOut08(Port+0, Char);
 }
+
+#endif

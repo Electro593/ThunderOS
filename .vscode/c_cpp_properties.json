@@ -5,7 +5,10 @@
             "includePath": [
                 "${workspaceFolder}/src/**"
             ],
-            "defines": [],
+            "defines": [
+                "INCLUDE_HEADER",
+                "INCLUDE_SOURCE"
+            ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "gnu17",
             "cppStandard": "gnu++14",

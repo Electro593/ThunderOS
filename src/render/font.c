@@ -7,6 +7,35 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
+typedef struct font_header {
+    v2u32 BitmapSize;
+    s32 Ascent;
+    s32 Descent;
+    s32 Linegap;
+    s32 MaxAdvanceX;
+    s32 AdvanceY;
+} font_header;
+
+typedef struct font_character {
+    c08 Codepoint;
+    s32 Advance;
+    s32 BearingX;
+    u64 KerningFileOffset;
+    u64 BitmapFileOffset;
+    v2s32 Pos;
+    v2u32 Size;
+} font_character;
+
+#endif
+
+
+
+#ifdef INCLUDE_SOURCE
+
+#if 0
+
 internal r32
 R32_Floor(r32 N)
 {
@@ -74,6 +103,7 @@ R32_Abs(r32 N)
 #undef STBTT_memset
 #undef STB_TRUETYPE_IMPLEMENTATION
 
+
 /* Format
 
 Font data
@@ -92,25 +122,6 @@ Kerning Table ...
 Character bitmaps ...
 
 */
-
-typedef struct font_header {
-    v2u32 BitmapSize;
-    s32 Ascent;
-    s32 Descent;
-    s32 Linegap;
-    s32 MaxAdvanceX;
-    s32 AdvanceY;
-} font_header;
-
-typedef struct font_character {
-    c08 Codepoint;
-    s32 Advance;
-    s32 BearingX;
-    u64 KerningFileOffset;
-    u64 BitmapFileOffset;
-    v2s32 Pos;
-    v2u32 Size;
-} font_character;
 
 internal b08
 CreateFontFile(vptr FontData,
@@ -225,3 +236,7 @@ CreateFontFile(vptr FontData,
     
     return TRUE;
 }
+
+#endif
+
+#endif

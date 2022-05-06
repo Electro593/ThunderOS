@@ -1,4 +1,4 @@
-ENTRY(KernelEntry)
+ENTRY(Kernel_Entry)
 SECTIONS
 {
   . = 0;

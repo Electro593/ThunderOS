@@ -7,6 +7,16 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
+typedef enum pixel_format {
+    PixelFormat_RGBX_8,
+    PixelFormat_BGRX_8,
+} pixel_format;
+
+#define _MAKE_COLOR(_0, _1, _2, _3) (((_0) << 24) | ((_1) << 16) | ((_2) << 8) | (_3))
+#define MAKE_COLOR(F, V) (F == PixelFormat_RGBX_8 ? _MAKE_COLOR(0, V.Z, V.Y, V.X) : _MAKE_COLOR(0, V.X, V.Y, V.Z))
+
 typedef struct terminal {
     u64 MaxLines;
     u64 LineNum;
@@ -23,9 +33,17 @@ typedef struct terminal {
     c08 *LastWordBreak;
 } terminal;
 
+#endif
+
+
+
+#ifdef INCLUDE_SOURCE
+
 internal terminal
 InitTerminal(u32 MaxLines,
              u32 MaxChars,
+             c08 **Lines,
+             c08 *Chars,
              font_header *Font,
              v2u32 BufferSize)
 {
@@ -34,8 +52,8 @@ InitTerminal(u32 MaxLines,
     Terminal.MaxLines = MaxLines;
     Terminal.CharCount = 0;
     Terminal.LineNum   = 1;
-    Terminal.Cursor = Context.Allocate(MaxChars * sizeof(c08));
-    Terminal.Lines  = Context.Allocate(MaxLines * sizeof(c08*));
+    Terminal.Cursor = Chars;
+    Terminal.Lines  = Lines;
     Terminal.Cursor[0] = 0;
     Terminal.Lines[0]  = Terminal.Cursor;
     Terminal.Font = Font;
@@ -67,8 +85,7 @@ WriteToTerminal(terminal *Terminal,
     u32 PosAtBreak = 0;
     c08 *C = TextToWrite;
     c08 *Buf = Terminal->Cursor;
-    while(*C)
-    {
+    while(*C) {
         b08 AddDifference = FALSE;
         u32 ToAdvance = 0;
         
@@ -133,8 +150,7 @@ DrawTerminal(u32 *Framebuffer,
     
     v2u32 Pos = (v2u32){0, Font->Ascent};
     c08 **Line = Terminal->Lines + Terminal->LineNum - LinesToShow;
-    for(u32 LineIndex = 0; LineIndex < LinesToShow; LineIndex++)
-    {
+    for(u32 LineIndex = 0; LineIndex < LinesToShow; LineIndex++) {
         Pos.X = 0;
         c08 *C = Line[LineIndex];
         c08 *NextLine;
@@ -144,8 +160,7 @@ DrawTerminal(u32 *Framebuffer,
             NextLine = Line[LineIndex+1];
         }
         
-        while(C < NextLine)
-        {
+        while(C < NextLine) {
             if(*C == '\n') {
                 C++;
                 continue;
@@ -166,10 +181,8 @@ DrawTerminal(u32 *Framebuffer,
             if(Char.BitmapFileOffset)
             {
                 u08 *Bitmap = (u08*)Font + Char.BitmapFileOffset;
-                for(s32 Y = 0; Y < Char.Size.Y; Y++)
-                {
-                    for(s32 X = 0; X < Char.Size.X; X++)
-                    {
+                for(s32 Y = 0; Y < Char.Size.Y; Y++) {
+                    for(s32 X = 0; X < Char.Size.X; X++) {
                         u32 _X = Pos.X + Char.BearingX + X;
                         u32 _Y = Pos.Y - Char.Pos.Y - Char.Size.Y + Y;
                         u32 PixelIndex = INDEX_2D(_X, _Y, BufferSize.X);
@@ -190,3 +203,5 @@ DrawTerminal(u32 *Framebuffer,
         Pos.Y += Font->AdvanceY;
     }
 }
+
+#endif

@@ -39,10 +39,10 @@ typedef struct acpi_madt_entry {
         } Type0;
         
         struct {
-            u08 APICID;
+            u08 IOAPICID;
             u08 _Reserved;
-            u32 APICAddress;
-            u32 Flags;
+            u32 IOAPICAddress;
+            u32 InterruptBase;
         } Type1;
         
         struct {
@@ -154,7 +154,7 @@ typedef struct acpi_madt {
     acpi_sdt Header;
     u32 LocalAPICAddress;
     u32 Flags;
-    acpi_madt_entry Entries[]; // Variable length entries!
+    acpi_madt_entry Entries[];
 } acpi_madt;
 
 typedef struct acpi_xsdt {
@@ -162,7 +162,7 @@ typedef struct acpi_xsdt {
     acpi_sdt *Entries[]; // Physical address
 } acpi_xsdt;
 
-typedef struct acpi_rsdp {
+typedef struct rsdp {
     c08 Signature[8];
     u08 Checksum;
     c08 OEMID[6];
@@ -172,11 +172,11 @@ typedef struct acpi_rsdp {
     acpi_xsdt *XSDT;
     u08 ExtendedChecksum;
     u08 _Reserved[3];
-} acpi_rsdp;
+} rsdp;
 #pragma pack(pop)
 
 typedef struct acpi {
-    acpi_rsdp *RSDP;
+    rsdp *RSDP;
     
     acpi_fadt *FADT;
     acpi_madt *MADT;
@@ -189,14 +189,17 @@ typedef struct acpi {
 
 #ifdef INCLUDE_SOURCE
 
+extern vptr APICBase;
+vptr APICBase;
+
 internal b08
-ValidateRSDP(acpi_rsdp *RSDP)
+ValidateRSDP(rsdp *RSDP)
 {
     if(RSDP->Revision != 2)
         return FALSE;
     
     u08 Sum = 0;
-    for(u32 ByteIndex = 0; ByteIndex < sizeof(acpi_rsdp); ++ByteIndex)
+    for(u32 ByteIndex = 0; ByteIndex < sizeof(rsdp); ++ByteIndex)
         Sum += ((u08*)RSDP)[ByteIndex];
     if(Sum != 0)
         return FALSE;
@@ -219,7 +222,7 @@ ValidateSDT(vptr SDT)
 }
 
 internal acpi
-InitACPI(acpi_rsdp *RSDP)
+InitACPI(rsdp *RSDP)
 {
     acpi ACPI = {0};
     
@@ -230,8 +233,7 @@ InitACPI(acpi_rsdp *RSDP)
     Assert(ValidateSDT(ACPI.XSDT));
     
     u32 SDTCount = (ACPI.XSDT->Header.Length - sizeof(acpi_sdt)) / sizeof(vptr);
-    for(u32 SDTIndex = 0; SDTIndex < SDTCount; ++SDTIndex)
-    {
+    for(u32 SDTIndex = 0; SDTIndex < SDTCount; ++SDTIndex) {
         acpi_sdt *SDT = ACPI.XSDT->Entries[SDTIndex];
         
         if(Mem_Cmp(SDT, "FACP", SIZEOF(acpi_sdt, Signature)) == EQUAL) {
@@ -246,34 +248,39 @@ InitACPI(acpi_rsdp *RSDP)
     return ACPI;
 }
 
-internal void
-InitInterrupts(acpi ACPI)
+internal thunderos_status
+InitAPIC(acpi ACPI)
 {
     // Disable PIC
-    PortOut08(Port_PIC1_Command, 0x11);
-    PortOut08(Port_PIC2_Command, 0x11);
-    PortWait;
-    PortOut08(Port_PIC1_Data, 0x20);
-    PortOut08(Port_PIC2_Data, 0x28);
-    PortWait;
-    PortOut08(Port_PIC1_Data, 0x04);
-    PortOut08(Port_PIC2_Data, 0x02);
-    PortWait;
-    PortOut08(Port_PIC1_Data, 0x01);
-    PortOut08(Port_PIC2_Data, 0x01);
-    PortWait;
-    PortOut08(Port_PIC1_Data, 0xFF);
-    PortOut08(Port_PIC2_Data, 0xFF);
+    PortOut08(0x20, 0x11);
+    PortOut08(0xA0, 0x11);
+    
+    PortOut08(0x21, 0x20);
+    PortOut08(0xA1, 0x28);
+    
+    PortOut08(0x21, 0x04);
+    PortOut08(0xA1, 0x02);
+    
+    PortOut08(0x21, 0x01);
+    PortOut08(0xA1, 0x01);
+    
+    PortOut08(0x21, 0xFF);
+    PortOut08(0xA1, 0xFF);
     
     acpi_madt *MADT = ACPI.MADT;
     u08 *LocalAPIC = (u08*)(u64)MADT->LocalAPICAddress;
+    // u08 *IOAPIC = NULL;
     
     u32 Offset = 0;
-    while(Offset < MADT->Header.Length - sizeof(acpi_sdt))
-    {
+    while(Offset < MADT->Header.Length - sizeof(acpi_sdt)) {
         acpi_madt_entry *Entry = (acpi_madt_entry*)((u08*)MADT->Entries + Offset);
         
         switch(Entry->Type) {
+            // case 1: {
+            //     if(Entry->Type1.InterruptBase == 0) {
+            //         IOAPIC = (u08*)Entry->Type1.IOAPICAddress;
+            //     }
+            // } break;
             case 5: {
                 LocalAPIC = (u08*)Entry->Type5.LocalAPICAddress;
             } break;
@@ -282,15 +289,13 @@ InitInterrupts(acpi ACPI)
         Offset += Entry->Length;
     }
     
+    APICBase = LocalAPIC;
+    SetMSR(0x1B, GetMSR(0x1B)|0x800);
+    
     u32 *SpuriousInterruptVector = (u32*)(LocalAPIC + 0x0F0);
     *SpuriousInterruptVector |= 0x000001FF;
     
-    gdt GDT = {0};
-    GDT.Entries[1].AccessByte = 0b10011010;
-    GDT.Entries[1].Attributes = 0b00100000;
-    GDT.Entries[2].AccessByte = 0b10010010;
-    GDT.Entries[2].Attributes = 0b00000000;
-    WriteGDTR(&GDT, sizeof(gdt));
+    return ST_Success;
 }
 
 #endif

@@ -10,29 +10,52 @@
 #include <shared.h>
 #include <kernel/efi.h>
 
-extern void DisableInterrupts(void);
-extern void EnableInterrupts(void);
-extern u08  PortIn08(u16 Address);
-// extern u16  PortIn16(u16 Address);
-// extern u32  PortIn32(u16 Address);
-extern void PortOut08(u16 Address, u08 Data);
-// extern void PortOut16(u16 Address, u16 Data);
-// extern void PortOut32(u16 Address, u32 Data);
-extern void WriteGDTR(gdt *GDT, u16 Size);
-// extern void WriteIDTR(idt *IDT, u16 Size);
-
-// #define PortWait PortOut08(0x80, 0);
-
 typedef enum thunderos_status {
    ST_Success,
+   ST_NotSupported,
 } thunderos_status;
 
 typedef enum thunderos_flags {
-   HW_HasSerial
+   HW_HasSerial = 0x01
 } thunderos_flags;
 
-#include <drivers/serial.c>
-#include <drivers/gdt.c>
+#define INCLUDE_HEADER
+    #include <util/mem.c>
+    #include <util/vector.c>
+    
+    #include <kernel/efi.h>
+    
+    #include <drivers/serial.c>
+    #include <drivers/descriptors.c>
+    #include <drivers/acpi.c>
+    
+    #include <render/font.c>
+    #include <render/terminal.c>
+#undef INCLUDE_HEADER
+
+#undef Assert
+#define Assert(...) UNUSED(__VA_ARGS__)
+
+extern u08  PortIn08(u16 Address);
+extern void PortOut08(u16 Address, u08 Data);
+extern void SetGDTR(vptr GDT, u16 Size);
+extern void SetIDTR(idt *IDT, u16 Size);
+extern u64  GetMSR(u32 Base);
+extern void SetMSR(u32 Base, u64 Value);
+extern void DisableInterrupts(void);
+extern void EnableInterrupts(void);
+
+#define INCLUDE_SOURCE
+    #include <util/mem.c>
+    #include <util/vector.c>
+    
+    #include <drivers/serial.c>
+    #include <drivers/interrupts.c>
+    #include <drivers/descriptors.c>
+    #include <drivers/acpi.c>
+    
+    #include <render/terminal.c>
+#undef INCLUDE_SOURCE
 
 #if 0
 
@@ -83,52 +106,9 @@ typedef struct __attribute__((packed)) bitmap_header {
     u32 ImportantColors;
 } bitmap_header;
 
-typedef struct gdt_segment_descriptor {
-    u16 Limit;
-    u16 BaseP1;
-    u08 BaseP2;
-    u08 AccessByte;
-    u08 Attributes;
-    u08 BaseP3;
-} gdt_segment_descriptor;
-
-typedef struct gdt {
-    gdt_segment_descriptor Entries[8];
-} gdt;
-
-typedef enum interrupt_ids {
-    Interrupt_Test = 0x00,
-} interrupt_ids;
-
-typedef enum idt_attribute_flags {
-    IDT_Gate_Interrupt = 0b1110,
-    IDT_Gate_Trap      = 0b1111,
-    
-    IDT_DPL_Ring0 = 0b00,
-    IDT_DPL_Ring1 = 0b01,
-    IDT_DPL_Ring2 = 0b10,
-    IDT_DPL_Ring3 = 0b11,
-} idt_attribute_flags;
-
-typedef struct idt_gate_descriptor {
-    u16 OffsetP1;
-    u16 SegmentSelector;
-    u16 Attributes;
-    u16 OffsetP2;
-    u32 OffsetP3;
-    u32 _Reserved1;
-} idt_gate_descriptor;
-
-typedef struct idt {
-    idt_gate_descriptor Entries[256];
-} idt;
-
-#include <kernel/efi.h>
 #include <util/intrin.h>
-#include <util/mem.c>
 #include <util/vector.c>
 #include <util/str.c>
-#include <drivers/acpi.c>
 #include <drivers/ps2.c>
 #include <render/font.c>
 #include <render/software.c>
@@ -242,37 +222,53 @@ KernelError(c08 *File,
 }
 #endif
 
-#undef Assert
-#define Assert(...)
-
 internal void
 InitGOP(efi_graphics_output_protocol *GOP)
 {
     u64 SizeOfGOPInfo;
     efi_graphics_output_mode_information *Info;
-    Status = GOP->QueryMode(GOP, GOP->Mode->Mode, &SizeOfGOPInfo, &Info);
+    efi_status Status = GOP->QueryMode(GOP, GOP->Mode->Mode, &SizeOfGOPInfo, &Info);
     Assert(Status == EFI_Status_Success);
     // Context.FramebufferSize = GOP->Mode->FrameBufferSize;
     // Context.Framebuffer = (u32*)GOP->Mode->FrameBufferBase;
 }
 
 external u32
-Kernel_Entry(efi_graphics_output_protocol *GOP)
+Kernel_Entry(rsdp *RSDP,
+             efi_graphics_output_protocol *GOP,
+             efi_simple_file_system_protocol *SFSP)
 {
-   u32 Status;
-   u64 Flags = 0;
-   
-   DisableInterrupts();
-   
-   InitGOP(GOP);
-   
-   u16 SerialPort;
-   Status = InitSerial(38400, &SerialPort);
-   if(Status == ST_Success) {
-      Flags |= HW_HasSerial;
-   }
-   
-   EnableInterrupts();
-   
-   return 0;
+    u32 Status;
+    u64 Flags = 0;
+    
+    DisableInterrupts();
+    
+    InitGOP(GOP);
+    
+    u16 SerialPort;
+    Status = Serial_Init(38400, &SerialPort);
+    if(Status == ST_Success) {
+       Flags |= HW_HasSerial;
+    }
+    
+    gdt GDT;
+    tss TSS;
+    u08 RingStacks[3][4096];
+    u08 ISTStacks[7][4096];
+    GDT_Init(&GDT, &TSS, (vptr*)RingStacks, (vptr*)ISTStacks);
+    
+    acpi ACPI = InitACPI(RSDP);
+    InitAPIC(ACPI);
+    
+    idt IDT;
+    IDT_Init(&IDT);
+    
+    EnableInterrupts();
+    
+    
+    
+    
+    while(1);
+    
+    return EFI_Status_Success;
 }

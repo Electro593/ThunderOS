@@ -7,6 +7,8 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
 #if defined(_MSVC)
 #   define EFI_API API
 #elif defined(_GCC)
@@ -506,3 +508,5 @@ typedef struct efi_loaded_image_protocol {
     efi_memory_type ImageDataType;
     efi_status (EFI_API *Unload) (IN efi_handle ImageHandle);
 } efi_loaded_image_protocol;
+
+#endif
