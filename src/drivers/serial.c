@@ -34,17 +34,46 @@ Serial_Init(u32 BaudRate, u16 *Port)
 }
 
 internal void
-Serial_Read(u16 Port, c08 *Char)
+Serial_ReadChar(u16 Port, c08 *Char)
 {
    while(!(PortIn08(Port+5) & 0x01));
    *Char = PortIn08(Port+0);
 }
 
 internal void
-Serial_Write(u16 Port, c08 Char)
+Serial_WriteChar(u16 Port, c08 Char)
 {
    while(!(PortIn08(Port+5) & 0x20));
    PortOut08(Port+0, Char);
+}
+
+internal u32
+Serial_ReadLine(u16 Port,
+                c08 *Buffer,
+                u32 BufferSize)
+{
+   u32 I;
+   for(I = 0; I < BufferSize-1; I++) {
+      Serial_ReadChar(Port, Buffer+I);
+      Serial_WriteChar(Port, Buffer[I]);
+      if(I < BufferSize-2 && Buffer[I] == '\r') {
+         Serial_WriteChar(Port, '\n');
+         Buffer[I+1] = '\n';
+         I += 2;
+         break;
+      }
+   }
+   Buffer[I] = 0;
+   
+   return I;
+}
+
+internal void
+Serial_Write(u16 Port,
+             c08 *Buffer)
+{
+   while(*Buffer)
+      Serial_WriteChar(Port, *Buffer++);
 }
 
 #endif

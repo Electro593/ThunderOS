@@ -103,6 +103,11 @@ SetMSR:
     wrmsr
     ret
 
+[global GetCR3]
+GetCR3:
+    mov rax, cr3
+    ret
+
 [global DisableInterrupts]
 DisableInterrupts:
     cli

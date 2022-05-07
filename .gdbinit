@@ -23,7 +23,8 @@ set architecture i386:x86-64:intel
 set disassembly-flavor intel
 target remote :1234
 
-break Kernel_Entry
+#break EFI_Entry
+#break Kernel_Entry
 
 layout split
 

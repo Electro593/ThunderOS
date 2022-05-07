@@ -10,6 +10,11 @@
 #include <shared.h>
 #include <kernel/efi.h>
 
+global struct {
+    u64 Flags;
+    u16 SerialPort;
+} Global;
+
 typedef enum thunderos_status {
    ST_Success,
    ST_NotSupported,
@@ -20,14 +25,15 @@ typedef enum thunderos_flags {
 } thunderos_flags;
 
 #define INCLUDE_HEADER
-    #include <util/mem.c>
     #include <util/vector.c>
+    #include <util/mem.c>
     
     #include <kernel/efi.h>
     
     #include <drivers/serial.c>
     #include <drivers/descriptors.c>
     #include <drivers/acpi.c>
+    #include <drivers/mem.c>
     
     #include <render/font.c>
     #include <render/terminal.c>
@@ -42,17 +48,20 @@ extern void SetGDTR(vptr GDT, u16 Size);
 extern void SetIDTR(idt *IDT, u16 Size);
 extern u64  GetMSR(u32 Base);
 extern void SetMSR(u32 Base, u64 Value);
+extern u64  GetCR3(void);
 extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
 
 #define INCLUDE_SOURCE
-    #include <util/mem.c>
     #include <util/vector.c>
+    #include <util/mem.c>
+    #include <util/str.c>
     
     #include <drivers/serial.c>
     #include <drivers/interrupts.c>
     #include <drivers/descriptors.c>
     #include <drivers/acpi.c>
+    #include <drivers/mem.c>
     
     #include <render/terminal.c>
 #undef INCLUDE_SOURCE
@@ -236,19 +245,21 @@ InitGOP(efi_graphics_output_protocol *GOP)
 external u32
 Kernel_Entry(rsdp *RSDP,
              efi_graphics_output_protocol *GOP,
-             efi_simple_file_system_protocol *SFSP)
+             efi_simple_file_system_protocol *SFSP,
+             efi_memory_descriptor *MemoryMap,
+             u64 MemoryMapDescriptorSize,
+             u32 MemoryMapDescriptorCount)
 {
     u32 Status;
-    u64 Flags = 0;
     
     DisableInterrupts();
     
     InitGOP(GOP);
     
-    u16 SerialPort;
-    Status = Serial_Init(38400, &SerialPort);
+    Status = Serial_Init(38400, &Global.SerialPort);
+    u16 SerialPort = Global.SerialPort;
     if(Status == ST_Success) {
-       Flags |= HW_HasSerial;
+       Global.Flags |= HW_HasSerial;
     }
     
     gdt GDT;
@@ -265,7 +276,27 @@ Kernel_Entry(rsdp *RSDP,
     
     EnableInterrupts();
     
+    c08 Buffer[64];
     
+    Serial_Write(SerialPort, "Hello! Testing the serial output\r\n");
+    
+    for(u32 I = 0; I < MemoryMapDescriptorCount; I++) {
+        efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
+        
+        Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->Type, 16));
+        Serial_Write(SerialPort, "\t");
+        Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->PhysicalStart, 16));
+        Serial_Write(SerialPort, "\t");
+        Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->VirtualStart, 16));
+        Serial_Write(SerialPort, "\t");
+        Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->PageCount, 10));
+        Serial_Write(SerialPort, "\r\n");
+    }
+    
+    // page_map_lvl4 PageMapLvl4 = *(vptr)GetCR3();
+    
+    
+    Serial_Write(SerialPort, U64_ToStr(Buffer, cr3, 16));
     
     
     while(1);

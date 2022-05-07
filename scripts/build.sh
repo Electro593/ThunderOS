@@ -9,7 +9,7 @@ fi
 
 
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Wno-builtin-declaration-mismatch -fomit-frame-pointer -fno-asynchronous-unwind-tables -mno-red-zone"
-CFLAGS="$CFLAGS -Isrc -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-braces -Wno-sign-compare"
+CFLAGS="$CFLAGS -Isrc -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-braces -Wno-sign-compare -Wno-pointer-sign -Wno-unused-value"
 CFLAGS="$CFLAGS -ggdb3"
 # CFLAGS="$CFLAGS -Ofast -fno-tree-slp-vectorize"
 # CFLAGS="$CFLAGS -ggdb3"

@@ -72,7 +72,13 @@ asm (
     #include <drivers/acpi.c>
 #undef INCLUDE_HEADER
 
-typedef u32 (*kernel_entry)(rsdp *RSDP, efi_graphics_output_protocol *GOP);
+typedef u32
+(*kernel_entry)(rsdp *RSDP,
+                efi_graphics_output_protocol *GOP,
+                efi_simple_file_system_protocol *SFSP,
+                efi_memory_descriptor *MemoryMap,
+                u64 MemoryMapDescriptorSize,
+                u32 MemoryMapDescriptorCount);
 
 internal void
 U64_ToStr(c16 *Buffer, u64 N, u32 Radix) {
@@ -144,7 +150,7 @@ EFI_Entry(u64 LoadBase,
     //
     // Load the kernel
     //
-    efi_simple_file_system_protocol *SFSP = 0;
+    efi_simple_file_system_protocol *SFSP;
     Status = BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_GUID_SIMPLE_FILE_SYSTEM_PROTOCOL, (vptr)&SFSP);
     SASSERT(EFI_Status_Success, u"ERROR: Could not load SimpleFileSystem Protocol\r\n");
     
@@ -246,72 +252,11 @@ EFI_Entry(u64 LoadBase,
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
         Buffer);
     SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-        u"\n");
+        u"\r\n");
     
     
     
     #if 0
-    //
-    // Memory
-    //
-    vptr MemBase;
-    u64 StackSize = 64 * 1024 * 1024;
-    Status = BootServices->AllocatePool(LoadedImage->ImageDataType, StackSize, &MemBase);
-    Assert(Status == EFI_Status_Success);
-    Context.Stack = Linear_Init(MemBase, StackSize);
-    Context.Allocate = Linear_Allocate;
-    
-    u64 MemoryMapSize, MemoryDescriptorSize;
-    Status = BootServices->GetMemoryMap(&MemoryMapSize, NULL, NULL, &MemoryDescriptorSize, NULL);
-    efi_memory_descriptor *MemoryMap = Context.Allocate(MemoryMapSize);
-    Status = BootServices->GetMemoryMap(&MemoryMapSize, MemoryMap, NULL, NULL, NULL);
-    u32 MemoryDescriptorCount = MemoryMapSize / MemoryDescriptorSize;
-    
-    // PageDirPtrTbl[0] = (u64)PageDir | 1
-    // PageDir[0] = 0b10000011;
-    // for(u32 I = 0; I < 1024; I++) {
-    //     PageDirectory[I] = 0x00000002;
-    // }
-    // for(u32 I = 0; I < 1024; I++) {
-    //     PageTable[I] = (I * 0x1000) | 3;
-    // }
-    // PageDirectory[0] = (u32)(u64)(u32*)PageTable | 3;
-    
-    //
-    // Files
-    //
-    efi_file_protocol *Volume = NULL;
-    efi_simple_file_system_protocol *SFSP = NULL;
-    Status = BootServices->HandleProtocol(LoadedImage->DeviceHandle, &EFI_GUID_SIMPLE_FILE_SYSTEM_PROTOCOL, (vptr)&SFSP);
-    Assert(Status == EFI_Status_Success);
-    Status = SFSP->OpenVolume(SFSP, &Volume);
-    Assert(Status == EFI_Status_Success);
-    
-    vptr TTFData;
-    efi_file_protocol *FileHandle;
-    u64 BufferSize;
-    efi_file_info *FileInfo = Context.Allocate(sizeof(efi_file_info));
-    Status = Volume->Open(Volume, &FileHandle, L"\\assets\\cour.ttf", EFI_FileMode_Read, 0);
-    Assert(Status == EFI_Status_Success);
-    Status = FileHandle->GetInfo(FileHandle, &EFI_GUID_FILE_INFO, &BufferSize, FileInfo);
-    if(Status == EFI_Status_BufferTooSmall) {
-        FileInfo = Context.Allocate(BufferSize);
-        Status = FileHandle->GetInfo(FileHandle, &EFI_GUID_FILE_INFO, &BufferSize, FileInfo);
-    }
-    TTFData = Context.Allocate(FileInfo->FileSize);
-    Status = FileHandle->Read(FileHandle, &FileInfo->FileSize, TTFData);
-    Assert(Status == EFI_Status_Success);
-    Status = FileHandle->Close(FileHandle);
-    Assert(Status == EFI_Status_Success);
-    u64 FontFileSize;
-    vptr FontFile;
-    bitmap_header BitmapHeaderOut;
-    CreateFontFile(TTFData, &FontFile, &FontFileSize, 28, &BitmapHeaderOut);
-    Status = Volume->Open(Volume, &FileHandle, u"\\assets\\cour.font", EFI_FileMode_Create|EFI_FileMode_Read|EFI_FileMode_Write, 0);
-    Status = FileHandle->Write(FileHandle, &FontFileSize, FontFile);
-    Status = FileHandle->Close(FileHandle);
-    
-    
     //
     // Renderer and Terminal
     //
@@ -393,29 +338,6 @@ EFI_Entry(u64 LoadBase,
         DrawTerminal(Framebuffer, &Terminal);
         GOP->Blt(GOP, (efi_graphics_output_blt_pixel*)Framebuffer, EFI_GraphicsOutputBltOperation_BufferToVideo, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
     }
-    
-    
-    
-    // InitPS2Controller(ACPI);
-    // DetectPS2Device();
-    
-    
-    
-    // u08 Data;
-    // while(!PS2_ReceiveData(&Data));
-    
-    
-    // asm ("int $3");
-    
-    
-    Mem_Set(Framebuffer, 0, FramebufferSize);
-    WriteToTerminal(&Terminal, "\n----  END  ----", 1);
-    DrawTerminal(Framebuffer, &Terminal);
-    GOP->Blt(GOP, (efi_graphics_output_blt_pixel*)Framebuffer, EFI_GraphicsOutputBltOperation_BufferToVideo, 0, 0, 0, 0, Renderer.Size.X, Renderer.Size.Y, 0);
-    
-    
-    BootServices->FreePool(Context.Stack);
-    
     #endif
     
     rsdp *RSDP = NULL;
@@ -429,17 +351,21 @@ EFI_Entry(u64 LoadBase,
     
     
     efi_graphics_output_protocol *GOP;
-    efi_guid GOPGUID = EFI_GUID_GRAPHICS_OUTPUT_PROTOCOL;
-    Status = BootServices->LocateProtocol(&GOPGUID, NULL, (vptr*)&GOP);
+    Status = BootServices->LocateProtocol(&EFI_GUID_GRAPHICS_OUTPUT_PROTOCOL, NULL, (vptr*)&GOP);
     SASSERT(EFI_Status_Success, u"ERROR: Could not load GraphicsOutput Protocol\r\n");
     
-    
-    u64 MemoryMapKey,MemoryMapSize;
-    Status = BootServices->GetMemoryMap(&MemoryMapSize, NULL, &MemoryMapKey, NULL, NULL);
+    efi_memory_descriptor *MemoryMap;
+    u64 MemoryMapKey, MemoryMapSize=0, MemoryMapDescriptorSize=0;
+    Status = BootServices->GetMemoryMap(&MemoryMapSize, NULL, NULL, &MemoryMapDescriptorSize, NULL);
+    MemoryMapSize += 2*sizeof(efi_memory_descriptor);
+    Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, MemoryMapSize, (vptr*)&MemoryMap);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not allocate memory for memory map\r\n");
+    Status = BootServices->GetMemoryMap(&MemoryMapSize, MemoryMap, &MemoryMapKey, &MemoryMapDescriptorSize, NULL);
+    SASSERT(EFI_Status_Success, u"ERROR: Could not get memory map\r\n");
     Status = BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
-    SASSERT(EFI_Status_Success, u"ERROR: Could not exit boot services\n");
+    SASSERT(EFI_Status_Success, u"ERROR: Could not exit boot services\r\n");
     
-    Status = ((kernel_entry)KernelEntryAddress)(RSDP, GOP);
+    Status = ((kernel_entry)KernelEntryAddress)(RSDP, GOP, SFSP, MemoryMap, MemoryMapDescriptorSize, MemoryMapSize/MemoryMapDescriptorSize);
     return Status;
     
     
