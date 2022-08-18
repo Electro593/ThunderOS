@@ -9,6 +9,8 @@
 
 #ifdef INCLUDE_SOURCE
 
+//TODO: Fully implement this
+
 internal u32
 Serial_Init(u32 BaudRate, u16 *Port)
 {

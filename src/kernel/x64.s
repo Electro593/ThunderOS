@@ -28,12 +28,12 @@ PortIn08:
 ;     in  ax,  dx
 ;     ret
 
-; [global PortIn32]
-; PortIn32:
-;     mov rdx, rdi
-;     xor rax, rax
-;     in  eax, dx
-;     ret
+[global PortIn32]
+PortIn32:
+    mov rdx, rdi
+    xor rax, rax
+    in  eax, dx
+    ret
 
 [global PortOut08]
 PortOut08:
@@ -49,12 +49,12 @@ PortOut08:
 ;     out dx,  ax
 ;     ret
 
-; [global PortOut32]
-; PortOut32:
-;     mov rdx, rdi
-;     mov rax, rsi
-;     out dx,  eax
-;     ret
+[global PortOut32]
+PortOut32:
+    mov rdx, rdi
+    mov rax, rsi
+    out dx,  eax
+    ret
 
 [global SetGDTR]
 gdtr dw 0
@@ -103,9 +103,19 @@ SetMSR:
     wrmsr
     ret
 
+[global GetCR0]
+GetCR0:
+    mov rax, cr0
+    ret
+
 [global GetCR3]
 GetCR3:
     mov rax, cr3
+    ret
+
+[global GetCR4]
+GetCR4:
+    mov rax, cr4
     ret
 
 [global DisableInterrupts]
@@ -122,12 +132,14 @@ EnableInterrupts:
 [global GetInterruptStep]
 GetInterruptStep:
     jmp .B
-.A: mov rax, 30
+.A: push byte 0
     jmp .B
 .B: mov rax, .B
     sub rax, .A
     ret
 
+; IMPORTANT: If the number of interrupts gets too high, the jmp
+; instruction will get larger. In that case, GetInterruptStep WILL NOT WORK!
 [global InterruptSwitch]
 InterruptSwitch:
     push byte 0
@@ -209,46 +221,36 @@ InterruptSwitch:
     push rbx
     push rax
     
-    
     mov rdi, [rsp + 128]
-    lea rdx, [InterruptHandlers + rax*8]
+    lea rdx, [InterruptHandlers + rdi*8]
     call rdx
     
-    mov bx, 32
-    mov ax, [rsp+1]
-    div bx
-    mov cl, ah
-    mov ch, al
-    
-    mov rbx, APICBase
-    ; mov rbx, [ACPIBase + ch*0x10 + 0x100]
-    mov rax, [rbx]
-    mov edx, 1
-    shl edx, cl
-    and ebx, edx
-    cmp ecx, 0
-    je .no_eoi
-        mov rcx, 0
-        lea rdx, [APICBase + 0x0B0];
-        mov [rdx], rcx
-        ; mov [APICBase + 0x0B0], 0
+    mov eax, [APICBase + 0x300]
+    shr eax, 8
+    and eax, 7
+    cmp eax, 1
+    jle .no_eoi
+        lea rax, [APICBase + 0x0B0]
+        mov [rax], dword 0
     .no_eoi:
     
-    push rax
-    push rbx
-    push rcx
-    push rdx
-    push rsi
-    push rdi
-    push rbp
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
+    pop rax
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rsi
+    pop rdi
+    pop rbp
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
     popfq
+    
     add rsp, 1
+    
     iretq

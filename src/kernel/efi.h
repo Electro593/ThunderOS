@@ -39,6 +39,7 @@
 #define EFI_GUID(Data1, Data2, Data3, ...)  (efi_guid){Data1, Data2, Data3, {__VA_ARGS__}}
 #define EFI_GUID_DEVICE_PATH_PROTOCOL        EFI_GUID(0x09576e91, 0x6d3f, 0x11d2, 0x8e,0x39,0x00,0xa0,0xc9,0x69,0x72,0x3b)
 #define EFI_GUID_FILE_INFO                   EFI_GUID(0x09576e92, 0x6d3f, 0x11d2, 0x8e,0x39,0x00,0xa0,0xc9,0x69,0x72,0x3b)
+#define EFI_GUID_PCI_ROOT_BRIDGE_IO_PROTOCOL EFI_GUID(0x2f707ebb, 0x4a1a, 0x11d4, 0x9a,0x38,0x00,0x90,0x27,0x3f,0xc1,0x4d)
 #define EFI_GUID_SIMPLE_TEXT_INPUT_PROTOCOL  EFI_GUID(0x387477c1, 0x69c7, 0x11d2, 0x8e,0x39,0x00,0xa0,0xc9,0x69,0x72,0x3b)
 #define EFI_GUID_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_GUID(0x387477c2, 0x69c7, 0x11d2, 0x8e,0x39,0x00,0xa0,0xc9,0x69,0x72,0x3b)
 #define EFI_GUID_LOADED_IMAGE_PROTOCOL       EFI_GUID(0x5b1b31a1, 0x9562, 0x11d2, 0x8e,0x3f,0x00,0xa0,0xc9,0x69,0x72,0x3b)
@@ -265,6 +266,56 @@ typedef struct efi_file_info {
     u64 Attribute;
     c16 FileName[];
 } efi_file_info;
+
+typedef enum efi_pci_root_bridge_io_protocol_width {
+    EfiPciWidthUint8,
+    EfiPciWidthUint16,
+    EfiPciWidthUint32,
+    EfiPciWidthUint64,
+    EfiPciWidthFifoUint8,
+    EfiPciWidthFifoUint16,
+    EfiPciWidthFifoUint32,
+    EfiPciWidthFifoUint64,
+    EfiPciWidthFillUint8,
+    EfiPciWidthFillUint16,
+    EfiPciWidthFillUint32,
+    EfiPciWidthFillUint64,
+    EfiPciWidthMaximum
+} efi_pci_root_bridge_io_protocol_width;
+
+typedef enum efi_pci_root_bridge_io_protocol_operation {
+    EfiPciOperationBusMasterWrite,
+    EfiPciOperationBusMasterRead,
+    EfiPciOperationBusMasterCommonBuffer,
+    EfiPciOperationBusMasterRead64,
+    EfiPciOperationBusMasterWrite64,
+    EfiPciOperationBusMasterCommonBuffer64,
+    EfiPciOperationMaximum
+} efi_pci_root_bridge_io_protocol_operation;
+
+typedef struct efi_pci_root_bridge_io_protocol {
+    efi_handle ParentHandle;
+    
+    efi_status (EFI_API *PollMem) (IN struct efi_pci_root_bridge_io_protocol *This, IN efi_pci_root_bridge_io_protocol_width Width, IN u64 Address, IN u64 Mask, IN u64 Value, IN u64 Delay, OUT u64 *Result);
+    efi_status (EFI_API *PollIo) (IN struct efi_pci_root_bridge_io_protocol *This, IN efi_pci_root_bridge_io_protocol_width Width, IN u64 Address, IN u64 Mask, IN u64 Value, IN u64 Delay, OUT u64 *Result);
+
+    struct efi_pci_root_bridge_io_protocol_access {
+        efi_status (EFI_API *Read)  (IN struct efi_pci_root_bridge_io_protocol *This, IN efi_pci_root_bridge_io_protocol_width Width, IN u64 Address, IN u64 Count, IN OUT vptr Buffer);
+        efi_status (EFI_API *Write) (IN struct efi_pci_root_bridge_io_protocol *This, IN efi_pci_root_bridge_io_protocol_width Width, IN u64 Address, IN u64 Count, IN OUT vptr Buffer);
+    } Mem, Io, Pci;
+    
+    efi_status (EFI_API *CopyMem)        (IN struct efi_pci_root_bridge_io_protocol *This, IN efi_pci_root_bridge_io_protocol_width Width, IN u64 DestAddress, IN u64 SrcAddress, IN u64 Count);
+    efi_status (EFI_API *Map)            (IN struct efi_pci_root_bridge_io_protocol *This, IN efi_pci_root_bridge_io_protocol_operation Operation, IN vptr HostAddress, IN OUT u64 *NumberOfBytes, OUT efi_physical_address *DeviceAddress, OUT vptr *Mapping);
+    efi_status (EFI_API *Unmap)          (IN struct efi_pci_root_bridge_io_protocol *This, IN vptr Mapping);
+    efi_status (EFI_API *AllocateBuffer) (IN struct efi_pci_root_bridge_io_protocol *This, IN efi_allocate_type Type, IN efi_memory_type MemoryType, IN u64 Pages, OUT vptr *HostAddress, IN u64 Attributes);
+    efi_status (EFI_API *FreeBuffer)     (IN struct efi_pci_root_bridge_io_protocol *This, IN u64 Pages, IN vptr HostAddress);
+    efi_status (EFI_API *Flush)          (IN struct efi_pci_root_bridge_io_protocol *This);
+    efi_status (EFI_API *GetAttributes)  (IN struct efi_pci_root_bridge_io_protocol *This, OUT OPT u64 *Supports, OUT OPT u64 *Attributes);
+    efi_status (EFI_API *SetAttributes)  (IN struct efi_pci_root_bridge_io_protocol *This, IN u64 Attributes, IN OUT OPT u64 *ResourceBase, IN OUT OPT u64 *ResourceLength);
+    efi_status (EFI_API *Configuration)  (IN struct efi_pci_root_bridge_io_protocol *This, OUT vptr *Resources);
+    
+    u32 SegmentNumber;
+} efi_pci_root_bridge_io_protocol;
 
 typedef struct efi_simple_text_input_protocol {
     efi_status (EFI_API *Reset)         (IN struct efi_simple_text_input_protocol *This, IN b08 ExtendedVerification);

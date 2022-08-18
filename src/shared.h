@@ -69,7 +69,8 @@ typedef double r64;
 typedef s08 b08;
 typedef u08 c08;
 typedef u16 c16;
-typedef void* vptr;
+typedef void* vptr; // Virtual pointer
+typedef u64   pptr; // Physical pointer
 
 #define FALSE 0
 #define TRUE  1

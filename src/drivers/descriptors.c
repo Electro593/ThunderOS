@@ -67,7 +67,7 @@ typedef struct idt {
    idt_gate_descriptor Entries[256];
 } idt;
 
-extern vptr InterruptHandlers[];
+vptr InterruptHandlers[256];
 
 #endif
 
@@ -122,43 +122,6 @@ GDT_Init(IN gdt *GDT, IN tss *TSS, vptr *RingStacks, vptr *ISTStacks)
    SetGDTR(GDT, sizeof(gdt)-1);
 }
 
-#define EXCEPTIONS \
-   ELEM( 0, DivideByZero,         void) \
-   ELEM( 1, Debug,                void) \
-   ELEM( 2, NonMaskableInterrupt, void) \
-   ELEM( 3, Breakpoint,           void) \
-   ELEM( 4, Overflow,             void) \
-   ELEM( 5, BoundsCheck,          void) \
-   ELEM( 6, InvalidOpcode,        void) \
-   ELEM( 7, DeviceNotAvailable,   void) \
-   ELEM( 8, DoubleFault,          u32 ErrorCode) \
-   ELEM(10, InvalidTSS,           u32 ErrorCode) \
-   ELEM(11, SegmentNotPresent,    u32 ErrorCode) \
-   ELEM(12, StackSegmentFault,    u32 ErrorCode) \
-   ELEM(13, GeneralProtection,    u32 ErrorCode) \
-   ELEM(14, PageFault,            u32 ErrorCode) \
-   ELEM(16, FloatingPoint,        void) \
-   ELEM(17, AlignmentCheck,       u32 ErrorCode) \
-   ELEM(18, MachineCheck,         void) \
-   ELEM(19, SIMDFloatingPoint,    void) \
-   ELEM(20, Virtualization,       void) \
-   ELEM(21, ControlProtection,    u32 ErrorCode) \
-   ELEM(28, HypervisorInjection,  void) \
-   ELEM(29, VMMCommunication,     u32 ErrorCode) \
-   ELEM(30, Security,             u32 ErrorCode)
-
-#define ELEM(Num, Name, ...) \
-   void Exception_##Name(__VA_ARGS__);
-EXCEPTIONS
-#undef ELEM
-
-vptr InterruptHandlers[30] = {
-   #define ELEM(Num, Name, ...) \
-      Exception_##Name,
-   EXCEPTIONS
-#undef ELEM
-};
-
 internal void
 IDT_SetEntry(idt *IDT, u32 Index, vptr Handler)
 {
@@ -178,10 +141,31 @@ IDT_SetEntry(idt *IDT, u32 Index, vptr Handler)
 internal void
 IDT_Init(IN idt *IDT)
 {
-   #define ELEM(Num, Name, ...) \
-      IDT_SetEntry(IDT, Num, Exception_##Name);
-   EXCEPTIONS
-   #undef ELEM
+   Mem_Set(InterruptHandlers, 0, sizeof(InterruptHandlers));
+   
+   IDT_SetEntry(IDT,   0, Exception_DivideByZero);
+   IDT_SetEntry(IDT,   1, Exception_Debug);
+   IDT_SetEntry(IDT,   2, Exception_NonMaskableInterrupt);
+   IDT_SetEntry(IDT,   3, Exception_Breakpoint);
+   IDT_SetEntry(IDT,   4, Exception_Overflow);
+   IDT_SetEntry(IDT,   5, Exception_BoundsCheck);
+   IDT_SetEntry(IDT,   6, Exception_InvalidOpcode);
+   IDT_SetEntry(IDT,   7, Exception_DeviceNotAvailable);
+   IDT_SetEntry(IDT,   8, Exception_DoubleFault);
+   IDT_SetEntry(IDT,  10, Exception_InvalidTSS);
+   IDT_SetEntry(IDT,  11, Exception_SegmentNotPresent);
+   IDT_SetEntry(IDT,  12, Exception_StackSegmentFault);
+   IDT_SetEntry(IDT,  13, Exception_GeneralProtection);
+   IDT_SetEntry(IDT,  14, Exception_PageFault);
+   IDT_SetEntry(IDT,  16, Exception_FloatingPoint);
+   IDT_SetEntry(IDT,  17, Exception_AlignmentCheck);
+   IDT_SetEntry(IDT,  18, Exception_MachineCheck);
+   IDT_SetEntry(IDT,  19, Exception_SIMDFloatingPoint);
+   IDT_SetEntry(IDT,  20, Exception_Virtualization);
+   IDT_SetEntry(IDT,  21, Exception_ControlProtection);
+   IDT_SetEntry(IDT,  28, Exception_HypervisorInjection);
+   IDT_SetEntry(IDT,  29, Exception_VMMCommunication);
+   IDT_SetEntry(IDT,  30, Exception_Security);
    
    SetIDTR(IDT, sizeof(idt)-1);
 }

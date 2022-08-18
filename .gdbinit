@@ -24,7 +24,10 @@ set disassembly-flavor intel
 target remote :1234
 
 #break EFI_Entry
-#break Kernel_Entry
+break Kernel_Entry
+break KernelError
+
+b x64.s:205
 
 layout split
 

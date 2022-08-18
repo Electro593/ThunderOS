@@ -75,10 +75,13 @@ asm (
 typedef u32
 (*kernel_entry)(rsdp *RSDP,
                 efi_graphics_output_protocol *GOP,
+                efi_pci_root_bridge_io_protocol *PRBIP,
                 efi_simple_file_system_protocol *SFSP,
                 efi_memory_descriptor *MemoryMap,
                 u64 MemoryMapDescriptorSize,
-                u32 MemoryMapDescriptorCount);
+                u32 MemoryMapDescriptorCount,
+                vptr PAllocPage1,
+                vptr PAllocPage2);
 
 internal void
 U64_ToStr(c16 *Buffer, u64 N, u32 Radix) {
@@ -200,10 +203,11 @@ EFI_Entry(u64 LoadBase,
         }
     }
     
-    u64 PageCount = (MaxAddress-MinAddress + PAGE_SIZE-1) / PAGE_SIZE;
-    // Status = BootServices->AllocatePages(EFI_AllocateType_AnyPages, EFI_MemoryType_LoaderData, PageCount, (vptr*)&MinAddress);
-    MinAddress = 4096;
-    Status = BootServices->AllocatePages(EFI_AllocateType_Address, EFI_MemoryType_LoaderData, PageCount, (vptr*)&MinAddress);
+    u32 PageMaskBits = 12;
+    u32 PageSize = 1 << PageMaskBits;
+    u64 PageCount = ((MaxAddress - MinAddress) >> PageMaskBits) + 1;
+    MinAddress = 0x1000;
+    Status = BootServices->AllocatePages(EFI_AllocateType_Address, EFI_MemoryType_LoaderData, PageCount + 4, (vptr*)&MinAddress);
     SASSERT(EFI_Status_Success, u"ERROR: Could not allocate pages for kernel\r\n");
     
     for(u32 I = 0; I < ELFHeader->ProgramHeaderCount; I++) {
@@ -349,10 +353,14 @@ EFI_Entry(u64 LoadBase,
         }
     }
     
+    //TODO: Make these asserts handle instead of crashing
     
     efi_graphics_output_protocol *GOP;
     Status = BootServices->LocateProtocol(&EFI_GUID_GRAPHICS_OUTPUT_PROTOCOL, NULL, (vptr*)&GOP);
     SASSERT(EFI_Status_Success, u"ERROR: Could not load GraphicsOutput Protocol\r\n");
+    
+    efi_pci_root_bridge_io_protocol *PRBIP;
+    Status = BootServices->LocateProtocol(&EFI_GUID_PCI_ROOT_BRIDGE_IO_PROTOCOL, NULL, (vptr*)&PRBIP);
     
     efi_memory_descriptor *MemoryMap;
     u64 MemoryMapKey, MemoryMapSize=0, MemoryMapDescriptorSize=0;
@@ -365,7 +373,7 @@ EFI_Entry(u64 LoadBase,
     Status = BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
     SASSERT(EFI_Status_Success, u"ERROR: Could not exit boot services\r\n");
     
-    Status = ((kernel_entry)KernelEntryAddress)(RSDP, GOP, SFSP, MemoryMap, MemoryMapDescriptorSize, MemoryMapSize/MemoryMapDescriptorSize);
+    Status = ((kernel_entry)KernelEntryAddress)(RSDP, GOP, PRBIP, SFSP, MemoryMap, MemoryMapDescriptorSize, MemoryMapSize/MemoryMapDescriptorSize, MinAddress+(PageCount*4096)));
     return Status;
     
     

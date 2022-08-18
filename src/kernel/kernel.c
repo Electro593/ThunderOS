@@ -11,59 +11,118 @@
 #include <kernel/efi.h>
 
 global struct {
-    u64 Flags;
-    u16 SerialPort;
+   u64 Flags;
+   u16 SerialPort;
 } Global;
 
 typedef enum thunderos_status {
    ST_Success,
    ST_NotSupported,
+   ST_InvalidParameter,
+   ST_NotFound,
 } thunderos_status;
 
 typedef enum thunderos_flags {
    HW_HasSerial = 0x01
 } thunderos_flags;
 
+typedef enum cr0_flag {
+   CR0_ProtectionEnable   = 0x00000001,
+   CR0_MonitorCoprocessor = 0x00000002,
+   CR0_Emulation          = 0x00000004,
+   CR0_TaskSwitched       = 0x00000008,
+   CR0_ExtensionType      = 0x00000010,
+   CR0_NumericError       = 0x00000020,
+   CR0_WriteProtect       = 0x00010000,
+   CR0_AlignmentMask      = 0x00040000,
+   CR0_NotWriteThrough    = 0x20000000,
+   CR0_CacheDisable       = 0x40000000,
+   CR0_Paging             = 0x80000000,
+} cr0_flag;
+
+typedef enum cr3_flag {
+   CR3_PageWriteThrough = 0x00000008,
+   CR3_PageCacheDisable = 0x00000010,
+} cr3_flag;
+
+typedef enum cr4_flag {
+   CR4_Virtual8086Extensions           = 0x00000001,
+   CR4_ProtectedVirtualInterrupts      = 0x00000002,
+   CR4_TimeStampDisable                = 0x00000004,
+   CR4_DebuggingExtensions             = 0x00000008,
+   CR4_PageSizeExtensions              = 0x00000010,
+   CR4_PhysicalAddressExtension        = 0x00000020,
+   CR4_MachineCheckEnable              = 0x00000040,
+   CR4_PageGlobalEnable                = 0x00000080,
+   CR4_PerformanceCounter              = 0x00000100,
+   CR4_FXSAVEAndFXRSTOR                = 0x00000200,
+   CR4_SIMDFloatExceptions             = 0x00000400,
+   CR4_UserModeInstructionPreventation = 0x00000800,
+   CR4_57BitLinearAddress              = 0x00002000,
+   CR4_VMXEnable                       = 0x00004000,
+   CR4_SMXEnable                       = 0x00010000,
+   CR4_FSGSBASEEnable                  = 0x00020000,
+   CR4_PCIDEnable                      = 0x00040000,
+   CR4_XSAVEAndExtendedStates          = 0x00080000,
+   CR4_KeyLocker                       = 0x00100000,
+   CR4_SMEPEnable                      = 0x00200000,
+   CR4_SMAPEnable                      = 0x00400000,
+   CR4_ControlFlowEnforcement          = 0x00800000,
+   CR4_SupervisorProtectionKeys        = 0x01000000,
+} cr4_flag;
+
 #define INCLUDE_HEADER
-    #include <util/vector.c>
-    #include <util/mem.c>
-    
-    #include <kernel/efi.h>
-    
-    #include <drivers/serial.c>
-    #include <drivers/descriptors.c>
-    #include <drivers/acpi.c>
-    #include <drivers/mem.c>
-    
-    #include <render/font.c>
-    #include <render/terminal.c>
+   #include <util/vector.c>
+   #include <util/mem.c>
+   
+   #include <kernel/efi.h>
+   
+   #include <drivers/serial.c>
+   #include <drivers/descriptors.c>
+   #include <drivers/acpi.c>
+   #include <drivers/mem.c>
+   #include <drivers/pci.c>
+   
+   #include <render/font.c>
+   #include <render/terminal.c>
 #undef INCLUDE_HEADER
 
 #undef Assert
 #define Assert(...) UNUSED(__VA_ARGS__)
 
 extern u08  PortIn08(u16 Address);
+extern u32  PortIn32(u16 Address);
 extern void PortOut08(u16 Address, u08 Data);
+extern void PortOut32(u16 Address, u32 Data);
 extern void SetGDTR(vptr GDT, u16 Size);
 extern void SetIDTR(idt *IDT, u16 Size);
 extern u64  GetMSR(u32 Base);
 extern void SetMSR(u32 Base, u64 Value);
+extern u64  GetCR0(void);
 extern u64  GetCR3(void);
+extern u64  GetCR4(void);
 extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
 
+internal void
+KernelError(c08 *File, u32 Line, c08 *Expression)
+{
+    
+}
+
 #define INCLUDE_SOURCE
-    #include <util/vector.c>
-    #include <util/mem.c>
-    #include <util/str.c>
-    
-    #include <drivers/serial.c>
-    #include <drivers/interrupts.c>
-    #include <drivers/descriptors.c>
-    #include <drivers/acpi.c>
-    #include <drivers/mem.c>
-    
-    #include <render/terminal.c>
+   #include <util/vector.c>
+   #include <util/mem.c>
+   #include <util/str.c>
+   
+   #include <drivers/serial.c>
+   #include <drivers/interrupts.c>
+   #include <drivers/descriptors.c>
+   #include <drivers/acpi.c>
+   #include <drivers/mem.c>
+   #include <drivers/pci.c>
+   
+   #include <render/terminal.c>
 #undef INCLUDE_SOURCE
 
 #if 0
@@ -234,72 +293,214 @@ KernelError(c08 *File,
 internal void
 InitGOP(efi_graphics_output_protocol *GOP)
 {
-    u64 SizeOfGOPInfo;
-    efi_graphics_output_mode_information *Info;
-    efi_status Status = GOP->QueryMode(GOP, GOP->Mode->Mode, &SizeOfGOPInfo, &Info);
-    Assert(Status == EFI_Status_Success);
-    // Context.FramebufferSize = GOP->Mode->FrameBufferSize;
-    // Context.Framebuffer = (u32*)GOP->Mode->FrameBufferBase;
+   u64 SizeOfGOPInfo;
+   efi_graphics_output_mode_information *Info;
+   efi_status Status = GOP->QueryMode(GOP, GOP->Mode->Mode, &SizeOfGOPInfo, &Info);
+   Assert(Status == EFI_Status_Success);
+   // Context.FramebufferSize = GOP->Mode->FrameBufferSize;
+   // Context.Framebuffer = (u32*)GOP->Mode->FrameBufferBase;
 }
 
 external u32
 Kernel_Entry(rsdp *RSDP,
              efi_graphics_output_protocol *GOP,
+             efi_pci_root_bridge_io_protocol *PRBIP,
              efi_simple_file_system_protocol *SFSP,
              efi_memory_descriptor *MemoryMap,
              u64 MemoryMapDescriptorSize,
-             u32 MemoryMapDescriptorCount)
+             u32 MemoryMapDescriptorCount,
+             vptr PAllocPages)
 {
-    u32 Status;
-    
-    DisableInterrupts();
-    
-    InitGOP(GOP);
-    
-    Status = Serial_Init(38400, &Global.SerialPort);
-    u16 SerialPort = Global.SerialPort;
-    if(Status == ST_Success) {
-       Global.Flags |= HW_HasSerial;
-    }
-    
-    gdt GDT;
-    tss TSS;
-    u08 RingStacks[3][4096];
-    u08 ISTStacks[7][4096];
-    GDT_Init(&GDT, &TSS, (vptr*)RingStacks, (vptr*)ISTStacks);
-    
-    acpi ACPI = InitACPI(RSDP);
-    InitAPIC(ACPI);
-    
-    idt IDT;
-    IDT_Init(&IDT);
-    
-    EnableInterrupts();
-    
-    c08 Buffer[64];
-    
-    Serial_Write(SerialPort, "Hello! Testing the serial output\r\n");
-    
-    for(u32 I = 0; I < MemoryMapDescriptorCount; I++) {
-        efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
-        
-        Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->Type, 16));
-        Serial_Write(SerialPort, "\t");
-        Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->PhysicalStart, 16));
-        Serial_Write(SerialPort, "\t");
-        Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->VirtualStart, 16));
-        Serial_Write(SerialPort, "\t");
-        Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->PageCount, 10));
-        Serial_Write(SerialPort, "\r\n");
-    }
-    
-    // page_map_lvl4 PageMapLvl4 = *(vptr)GetCR3();
-    
-    
-    Serial_Write(SerialPort, U64_ToStr(Buffer, cr3, 16));
-    
-    
-    while(1);
-    
-    return EFI_Status_Success;
+   u32 Status;
+   
+   DisableInterrupts();
+   
+   
+   u64 CR0 = GetCR0();
+   u64 CR3 = GetCR3();
+   u64 CR4 = GetCR4();
+   
+   //TODO: Guarantee the existance of a map set at 0
+   //TODO: Guarantee that CR3 is recursively mapped.
+   if(CR4 & CR4_57BitLinearAddress) {
+      // TODO
+   } else {
+      page_map_lvl4 *Lvl4  = (vptr)(CR3 & 0xFFFFFFFFFFFFF000);
+      page_map_lvl3 *Lvl3  = (vptr)(Lvl4->Entries[0] & 0x000FFFFFFFFFF000);
+      page_directory *Lvl2 = (vptr)(Lvl3->Entries[0] & 0x000FFFFFFFFFF000);
+      page_table *Lvl1     = (vptr)(Lvl2->Entries[0] & 0x000FFFFFFFFFF000);
+      vptr Page            = (vptr)(Lvl1->Entries[0] & 0x000FFFFFFFFFF000);
+      Page = NULL;
+   }
+   
+   page_dir_map *DirMap = (vptr)PAllocPages;
+   Mem_Set(DirMap, 0, sizeof(palloc_dir_map));
+   
+   
+   {
+      efi_memory_descriptor *FreeBuffer[64];
+      efi_memory_descriptor *UsedBuffer[64];
+      b08 FreeBufferFull = FALSE;
+      b08 UsedBufferFull = FALSE;
+      u32 FreeWriteCursor = 0;
+      u32 UsedWriteCursor = 0;
+      u32 FreeReadCursor  = 0;
+      u32 UsedReadCursor  = 0;
+      
+      //TODO: Sort the descriptors
+      
+      for(u32 I = 0; I < MemoryDescriptorCount; I++) {
+         efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
+         
+         switch(Descriptor->Type) {
+            case EFI_MemoryType_Reserved:
+            case EFI_MemoryType_LoaderData:
+            case EFI_MemoryType_RuntimeServicesCode:
+            case EFI_MemoryType_RuntimeServicesData:
+            case EFI_MemoryType_UnusableMemory:
+            case EFI_MemoryType_ACPIReclaim:
+            case EFI_MemoryType_ACPIMemoryNVS:
+            case EFI_MemoryType_MappedIO:
+            case EFI_MemoryType_MappedIOPortSpace:
+            case EFI_MemoryType_PalCode:
+            case EFI_MemoryType_Unaccepted: {
+               if(!UsedBufferFull) {
+                  UsedBuffer[UsedWriteCursor++] = Descriptor;
+                  UsedWriteCursor %= 64;
+                  if(UsedWriteCursor == UsedReadCursor)
+                     UsedBufferFull = TRUE;
+               }
+            } break;
+            
+            case EFI_MemoryType_LoaderCode:
+            case EFI_MemoryType_BootServicesCode:
+            case EFI_MemoryType_BootServicesData:
+            case EFI_MemoryType_ConventionalMemory:
+            case EFI_MemoryType_Persistent: {
+               if(!FreeBufferFull) {
+                  FreeBuffer[FreeWriteCursor++] = Descriptor;
+                  FreeWriteCursor %= 64;
+                  if(FreeWriteCursor == FreeReadCursor)
+                     FreeBufferFull = TRUE;
+               }
+            } break;
+         }
+         
+         // UsedBuffer is empty
+         if(!UsedBufferFull && UsedReadCursor == UsedWriteCursor)
+            continue;
+         
+         if(UsedBufferFull || I == MemoryDescriptorCount-1) {
+            // No free blocks found yet
+            if(!FreeBufferFull && FreeReadCursor == FreeWriteCursor) {
+               
+               
+               
+               continue;
+            }
+            
+            do {
+               UsedDescriptor = UsedBuffer[UsedReadCursor++];
+               pptr UsedStart = UsedDescriptor->PhysicalStart;
+               u64 UsedCount = UsedDescriptor->PageCount;
+               
+               u32 PAllocCount;
+               GetNumPagesToMapPAllocRange(DirMap, UsedStart, UsedCount, &PAllocCount);
+               
+               while(TRUE) {
+                  FreeDescriptor = FreeBuffer[FreeReadCursor++];
+                  pptr FreeStart = FreeDescriptor->PhysicalStart;
+                  u64 FreeCount = FreeDescriptor->PageCount;
+                  
+                  
+                  
+                  FreeReadCursor &= 64;
+               }
+               
+               
+               
+               UsedReadCursor %= 64;
+            } while(UsedReadCursor != UsedWriteCursor);
+            
+            UsedBufferFull = FALSE;
+         }
+      }
+   }
+   
+   InitGOP(GOP);
+   
+   Status = Serial_Init(38400, &Global.SerialPort);
+   u16 SerialPort = Global.SerialPort;
+   if(Status == ST_Success) {
+      Global.Flags |= HW_HasSerial;
+   }
+   
+   gdt GDT;
+   tss TSS;
+   u08 RingStacks[3][4096];
+   u08 ISTStacks[7][4096];
+   GDT_Init(&GDT, &TSS, (vptr*)RingStacks, (vptr*)ISTStacks);
+   
+   acpi ACPI = InitACPI(RSDP);
+   InitAPIC(ACPI);
+   
+   //TODO: Reclaim the ACPI data
+   
+   idt IDT;
+   IDT_Init(&IDT);
+   
+   //TODO: Pluggable drivers?
+   //TODO: Handle when certain devices are unavailable
+   
+   pci PCI;
+   if(PRBIP) {
+      PCI = PCI_Init();
+      // PCI_GetDeviceMemory(PCI_Serial, PCI_Serial_USB, PCI_Serial_USB_XHCI);
+   }
+   
+   //TODO: Definitely need a better PCI system
+   if(PCI.XHCI & 0x80000000) {
+      u08 B = (PCI.XHCI >> 16) & 0xFF;
+      u08 D = (PCI.XHCI >>  8) & 0xFF;
+      u08 F = (PCI.XHCI >>  0) & 0xFF;
+      u64 BAR0 = PCI_Read32(B, D, F, OFFSETOF(pci_header, Type0.BaseAddress0));
+      u64 BAR1 = PCI_Read32(B, D, F, OFFSETOF(pci_header, Type0.BaseAddress1));
+      u64 Address = (BAR1<<32) | BAR0;
+      
+      // PCI_EnableMSI(B, D, F);
+   }
+   
+   EnableInterrupts();
+   
+   c08 Buffer[64];
+   
+   Serial_Write(SerialPort, "Hello! Testing the serial output\r\n");
+   
+   for(u32 I = 0; I < MemoryMapDescriptorCount; I++) {
+      efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
+      
+      Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->Type, 16));
+      Serial_Write(SerialPort, "\t");
+      Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->PhysicalStart, 16));
+      Serial_Write(SerialPort, "\t");
+      Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->VirtualStart, 16));
+      Serial_Write(SerialPort, "\t");
+      Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->PageCount, 10));
+      Serial_Write(SerialPort, "\r\n");
+   }
+   
+   Serial_Write(SerialPort, "CR0: ");
+   Serial_Write(SerialPort, U64_ToStr(Buffer, CR0, 16));
+   Serial_Write(SerialPort, "\r\nCR3: ");
+   Serial_Write(SerialPort, U64_ToStr(Buffer, CR3, 16));
+   Serial_Write(SerialPort, "\r\nCR4: ");
+   Serial_Write(SerialPort, U64_ToStr(Buffer, CR4, 16));
+   Serial_Write(SerialPort, "\r\n");
+   
+   // u64 *Ptr = (u64*)0x0000FFFFFFFFFFFF;
+   // *Ptr = 5;
+   
+   while(1);
+   
+   return EFI_Status_Success;
 }

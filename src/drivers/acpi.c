@@ -183,6 +183,12 @@ typedef struct acpi {
     acpi_xsdt *XSDT;
 } acpi;
 
+typedef struct local_apic {
+    u08 _Reserved0[32];
+    u64 LocalAPICIDRegister[2];
+    u64 LocalAPICVersionRegister[2];
+} local_apic;
+
 #endif
 
 
