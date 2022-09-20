@@ -192,14 +192,17 @@ typedef struct palloc_dir_map {
 #define GetPAllocTable(Entry, Index)      (vptr)(Entry->Tables[Index]   & 0xFFFFFFFFFFFFF000)
 #define GetPAllocPageMap(Table, Index)    (vptr)(Table->PageMaps[Index] & 0xFFFFFFFFFFFFF000)
 
-// Different to avoid circular recursion. Instead of allocating extra
+// Different to avoid infinite recursion. Instead of allocating extra
 // page tables from AllocatePhysicalPage, it assumes there are free
 // pages at Physical since invalid addresses are set as used.
-internal thunderos_status
+internal void
 MapPAllocPage(pptr Physical, vptr *VirtualOut, u32 *UsedCountOut)
 {
+   Assert(!(Physical & 0xFFF) && VirtualOut && UsedCountOut);
+   
    b08 HasLvl5 = ((GetCR4() & CR4_57BitLinearAddress) != 0);
    pptr PhysicalStart = Physical;
+   u64 *PrevEntry;
    vptr EntryAddress = 0xFFFFFFFFFFFFF000;
    u32 I = !HasLvl5;
    
@@ -211,9 +214,14 @@ MapPAllocPage(pptr Physical, vptr *VirtualOut, u32 *UsedCountOut)
          if(!(*Entry & Page_Full)) break;
       }
       
-      // This will only happen if we're entirely out of virtual
+      // J == 512 will only happen if we're entirely out of virtual
       // address space, which is extremely unlikely, or the data
-      // got corrupted somehow
+      // got corrupted somehow.
+      if(I == !HasLvl5 && J == 512) {
+         //TODO: Defragment
+      } else if(I > !HasLvl5 && J == 511) {
+         *PrevEntry |= Page_Full;
+      }
       Assert(J != 512);
       
       if(!(*Entry & Page_Present)) {
@@ -221,6 +229,7 @@ MapPAllocPage(pptr Physical, vptr *VirtualOut, u32 *UsedCountOut)
          Physical += 0x1000;
       }
       
+      PrevEntry = Entry;
       EntryAddress = (EntryAddress | (J << 3)) << 9;
    }
    
@@ -230,13 +239,8 @@ MapPAllocPage(pptr Physical, vptr *VirtualOut, u32 *UsedCountOut)
    else if(!HasLvl5 && !(EntryAddress & 0x0000800000000000))
       EntryAddress &= 0x0000FFFFFFFFFFFF;
    
-   if(VirtualOut)
-      *VirtualOut = EntryAddress;
-   
-   if(UsedCountOut)
-      *UsedCountOut = (Physical - PhysicalStart) >> 12;
-   
-   return ST_Success;
+   *VirtualOut = EntryAddress;
+   *UsedCountOut = (Physical - PhysicalStart) >> 12;
 }
 
 /*
@@ -443,15 +447,16 @@ SetPAllocDirMapRange(palloc_dir_map *DirMap, u32 Start, u32 Count)
    }
 }
 
-internal void
-GetPAllocTableMapAddr(palloc_dir_entry *Entry, u64 *TableMapAddrOut)
+internal u64
+GetPAllocTableMapAddr(palloc_dir_entry *Entry)
 {
-   Assert(Entry && TableMapAddrOut);
+   Assert(Entry);
    
    u32 TableMapAddr = 0;
    for(u32 I = 0; I < 32; I++)
       TableMapAddr = (TableMapAddr << 2) | ((Entry->Tables[I] >> 10) & 3);
-   *TableMapAddrOut = TableMapAddr;
+   
+   return TableMapAddr;
 }
 
 internal void
@@ -466,6 +471,7 @@ SetPAllocTableMapAddr(palloc_dir_entry *Entry, u64 TableMapAddr)
    }
 }
 
+/*
 // internal void
 // SetSparsePAllocPageRange(palloc_dir_map *DirMap, pptr Start, u64 Count,
 //                          vptr *ExtraPages, u32 *ExtraPageCount)
@@ -511,15 +517,15 @@ SetPAllocTableMapAddr(palloc_dir_entry *Entry, u64 TableMapAddr)
    
    
 // }
+*/
 
-internal thunderos_status
+internal void
 FindFreePAllocDirEntry(palloc_dir_map *DirMap, u32 *DirIndexOut, u32 *EntryIndexOut)
 {
-   if(!DirMap || !DirIndexOut || !EntryIndexOut) return ST_InvalidParameter;
+   Assert(DirMap && DirIndexOut && EntryIndexOut);
+   Assert(!(DirMap->LvlE & 1));
    
    u32 Bit = 1;
-   if(DirMap->LvlE & Bit) return ST_NotFound;
-   
    u08 *Bytes = &DirMap->LvlE;
    u08 Byte, Mask;
    
@@ -534,20 +540,17 @@ FindFreePAllocDirEntry(palloc_dir_map *DirMap, u32 *DirIndexOut, u32 *EntryIndex
    
    *DirIndexOut = (Bit >> 4) & 0xFF; // 4096..8191 -> 256..511 -> 0..255
    *EntryIndexOut = (Bit & 0xF);
-   
-   return ST_Success;
 }
 
-internal thunderos_status
+internal void
 FindFreePAllocPageMap(palloc_dir_entry *Entry, palloc_map *TableMap, u32 *TableIndexOut, u32 *MapIndexOut)
 {
-   if(!Entry || !TableMap || !TableIndexOut || !MapIndexOut) return ST_InvalidParameter;
+   Assert(Entry && TableMap && TableIndexOut && MapIndexOut);
+   Assert(!(TableMap->LvlE & 1));
    
    u32 Bit = 1;
    u08 *Bytes = &TableMap->LvlE;
    u08 Byte, Mask;
-   
-   if(TableMap->LvlE & Bit) return ST_NotFound;
    
    for(u32 I = 0; I < 14; I++) {
       Bit <<= 1;
@@ -560,20 +563,17 @@ FindFreePAllocPageMap(palloc_dir_entry *Entry, palloc_map *TableMap, u32 *TableI
    
    *TableIndexOut = (Bit >> 9) & 0x1F; // 16384..32767 -> 32..63 -> 0..31
    *MapIndexOut = (Bit & 0x1FF);
-   
-   return ST_Success;
 }
 
-internal thunderos_status
-FindFreePAllocPage(palloc_map *PageMap, u32 *PageIndexOut)
+internal u32
+FindFreePAllocPage(palloc_map *PageMap)
 {
-   if(!PageMap || !PageIndexOut) return ST_InvalidParameter;
+   Assert(PageMap);
+   Assert(!(PageMap->LvlE & 1));
    
    u32 Bit = 1;
    u08 *Bytes = &PageMap->LvlE;
    u08 Byte, Mask;
-   
-   if(!(PageMap->LvlE & Bit)) return ST_NotFound;
    
    for(u32 I = 0; I < 14; I++) {
       Bit <<= 1;
@@ -584,88 +584,15 @@ FindFreePAllocPage(palloc_map *PageMap, u32 *PageIndexOut)
    
    Assert(!((Bit & 1) && (Byte & (Mask<<1))));
    
-   *PageIndexOut = Bit & 0x3FFF; // 16384..32767 -> 0..16383
-   
-   return ST_Success;
+   return Bit & 0x3FFF; // 16384..32767 -> 0..16383
 }
 
-internal thunderos_status
-FindFreePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
+internal pptr
+AllocatePhysicalPage(palloc_dir_map *DirMap)
 {
-   if(!DirMap || !PageOut) return ST_InvalidParameter;
+   Assert(DirMap);
    
-   thunderos_status Status;
-   u32 DirCount, EntryCount, TableCount, MapCount, PageCount;
-   
-   palloc_dir *Dir;
-   palloc_dir_entry *Entry;
-   palloc_map *TableMap, *PageMap;
-   palloc_table *Table;
-   u32 DirIndex, EntryIndex, TableIndex, MapIndex, PageIndex;
-   
-   // Find the palloc_dir and palloc_dir_entry
-   {
-      Status = FindFreePAllocDirEntry(DirMap, &DirIndex, &EntryIndex);
-      Assert(Status == ST_Success);
-      
-      if(!(DirMap->Dirs[DirIndex] & PAlloc_Present)) {
-         *PageOut = (DirIndex << 44);
-         return ST_Success;
-      }
-      
-      Dir = (vptr)((u64)DirMap->Dirs[DirIndex] & 0xFFFFFFFFFFFFF000);
-      Entry = Dir->Entries + EntryIndex;
-   }
-   
-   // Find the 'table' palloc_map
-   {
-      u64 TableMapAddr;
-      GetPAllocTableMapAddr(Entry, &TableMapAddr);
-      
-      if(!(TableMapAddr & PAlloc_Present)) {
-         *PageOut = (DirIndex << 44) | (EntryIndex << 40);
-         return ST_Success;
-      }
-      
-      TableMap = (vptr)(TableMapAddr & 0xFFFFFFFFFFFFF000);
-   }
-   
-   // Find the palloc_table and 'page' palloc_map
-   {
-      Status = FindFreePAllocPageMap(Entry, TableMap, &TableIndex, &MapIndex);
-      Assert(Status == ST_Success);
-      
-      if(!(Entry->Tables[TableIndex] & PAlloc_Present)) {
-         *PageOut = (DirIndex << 44) | (EntryIndex << 40) | (TableIndex << 35);
-         return ST_Success;
-      }
-      
-      Table = (vptr)(Entry->Tables[TableIndex] & 0xFFFFFFFFFFFFF000);
-      
-      if(!(Table->PageMaps[MapIndex] & PAlloc_Present)) {
-         *PageOut = (DirIndex << 44) | (EntryIndex << 40) | (TableIndex << 35) | (MapIndex << 26);
-         return ST_Success;
-      }
-      
-      PageMap = (vptr)(Table->PageMaps[MapIndex] & 0xFFFFFFFFFFFFF000);
-   }
-   
-   // Find the page
-   {
-      Status = FindFreePAllocPage(PageMap, &PageIndex);
-      Assert(Status == ST_Success);
-      
-      *PageOut = (DirIndex << 44) | (EntryIndex << 40) | (TableIndex << 35) | (MapIndex << 26) | (PageIndex << 12);
-      return ST_Success;
-   }
-}
-
-internal thunderos_status
-AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
-{
-   if(!DirMap || !PageOut) return ST_InvalidParameter;
-   
-   thunderos_status Status;
+   pptr PageOut;
    u32 PageCount = 0;
    
    palloc_dir *Dir;
@@ -676,8 +603,12 @@ AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
    
    // Find Dir and Entry
    {
-      Status = FindFreePAllocDirEntry(DirMap, &DirIndex, &EntryIndex);
-      Assert(Status == ST_Success);
+      if(DirMap->LvlE & 1) {
+         //TODO: Allocate a swap page
+         Assert(FALSE);
+      }
+      
+      FindFreePAllocDirEntry(DirMap, &DirIndex, &EntryIndex);
       
       if(!(DirMap->Dirs[DirIndex] & PAlloc_Present)) {
          u64 PAddr = DirIndex << 44;
@@ -694,8 +625,7 @@ AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
    
    // Find TableMap
    {
-      u64 TableMapAddr;
-      GetPAllocTableMapAddr(Entry, &TableMapAddr);
+      u64 TableMapAddr = GetPAllocTableMapAddr(Entry);
       
       if(!(TableMapAddr & PAlloc_Present)) {
          u64 PAddr = (DirIndex << 44) | (EntryIndex << 40) | (PageCount << 12);
@@ -715,8 +645,8 @@ AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
    
    // Find Table and PageMap
    {
-      Status = FindFreePAllocPageMap(Entry, TableMap, &TableIndex, &MapIndex);
-      Assert(Status == ST_Success);
+      Assert(!(TableMap->LvlE & 1));
+      FindFreePAllocPageMap(Entry, TableMap, &TableIndex, &MapIndex);
       
       Table = Entry->Tables[TableIndex];
       if(!(Entry->Tables[TableIndex] & PAlloc_Present)) {
@@ -746,10 +676,10 @@ AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
    
    // Allocate the pages
    if(PageCount == 0) {
-      Status = FindFreePAllocPage(PageMap, &PageIndex);
-      Assert(Status == ST_Success);
+      Assert(!(PageMap->LvlE & 1));
+      PageIndex = FindFreePAllocPage(PageMap);
       
-      *PageOut = (DirIndex << 44) | (EntryIndex << 40) | (TableIndex << 35) | (MapIndex << 26) | (PageIndex << 12);
+      PageOut = (DirIndex << 44) | (EntryIndex << 40) | (TableIndex << 35) | (MapIndex << 26) | (PageIndex << 12);
       
       u32 Bit = (1 << 14) | PageIndex;
       for(u32 I = 0; I <= 14; I++) {
@@ -760,7 +690,7 @@ AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
          if((*Byte & Mask2) != Mask2) break;
          Bit >>= 1;
       }
-      if(!(PageMap->LvlE & 2)) return ST_Success;
+      if(!(PageMap->LvlE & 2)) return PageOut;
       
       Bit = (1 << 14) | (TableIndex << 9) | MapIndex;
       for(u32 I = 0; I <= 14; I++) {
@@ -771,7 +701,7 @@ AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
          if((*Byte & Mask2) != Mask2) break;
          Bit >>= 1;
       }
-      if(!(TableMap->LvlE & 2)) return ST_Success;
+      if(!(TableMap->LvlE & 2)) return PageOut;
       
       Bit = (1 << 12) | (DirIndex << 4) | EntryIndex;
       for(u32 I = 0; I <= 12; I++) {
@@ -785,36 +715,35 @@ AllocatePhysicalPage(palloc_dir_map *DirMap, pptr *PageOut)
       
       //TODO: Some way to delete the full pages?
    } else {
-      Assert(PageCount < 16383);
+      // Should really never possibly be hit, but you know. Might as well.
+      Assert(PageCount < 16384);
       
       // If any other pages were allocated, PageMap should be new, so it
       // should be empty. Therefore, just set the first bits.
       
       // Allocate the original page while we're at it.
-      *PageOut = (DirIndex << 44) | (EntryIndex << 40) | (TableIndex << 35) | (MapIndex << 26) | (PageCount << 12);
+      PageOut = (DirIndex << 44) | (EntryIndex << 40) | (TableIndex << 35) | (MapIndex << 26) | (PageCount << 12);
       PageCount++;
       
       SetPAllocPageMapRange(PageMap, 0, PageCount);
    }
    
-   return ST_Success;
+   return PageOut;
 }
 
 internal void
 FreePhysicalPage(palloc_dir_map *DirMap, pptr Page)
 {
+   Assert(!(Page & 0xFFF));
+   
    u32 DirIndex   = (Page >> 44) & 0x00FF;
    u32 EntryIndex = (Page >> 40) & 0x000F;
    u32 TableIndex = (Page >> 35) & 0x001F;
    u32 MapIndex   = (Page >> 26) & 0x01FF;
    u32 PageIndex  = (Page >> 12) & 0x3FFF;
-   Page &= 0xFFFFFFFFFFFFF000;
    
    u32 DirMapIndex   = (Page >> 40) & 0x0FFF;
    u32 TableMapIndex = (Page >> 26) & 0x3FFF;
-   u32 PageMapIndex  = (Page >> 12) & 0x3FFF;
-   
-   thunderos_status Status;
    
    palloc_dir *Dir;
    if(!(DirMap->Dirs[DirIndex] & PAlloc_Present)) {
@@ -822,18 +751,10 @@ FreePhysicalPage(palloc_dir_map *DirMap, pptr Page)
       // we're freeing a non-allocated page, which shouldn't happen
       Assert(DirMap->Lvl4[DirIndex >> 3] & (DirIndex & 7));
       
-      u64 DirAddr;
-      b08 Reallocated = FALSE;
-      Status = AllocatePhysicalPage(DirMap, &DirAddr);
-      if(Status == ST_NotFound) {
-         DirAddr = Page;
-         Reallocated = TRUE;
-      }
+      u64 DirAddr = AllocatePhysicalPage(DirMap);
       DirMap->Dirs[DirIndex] = DirAddr | PAlloc_Present;
       Dir = (vptr)DirAddr;
       Mem_Set(Dir, 0, sizeof(palloc_dir));
-      
-      if(Reallocated) return;
    } else {
       Dir = GetPAllocDir(DirMap, DirIndex);
    }
@@ -847,18 +768,11 @@ FreePhysicalPage(palloc_dir_map *DirMap, pptr Page)
       // Same as with Dir
       Assert(DirMap->Lvl0[DirMapIndex >> 3] & (DirMapIndex & 7));
       
-      b08 Reallocated = FALSE;
-      Status = AllocatePhysicalPage(DirMap, &TableMapAddr);
-      if(Status == ST_NotFound) {
-         TableMapAddr = Page;
-         Reallocated = TRUE;
-      }
+      u64 TableMapAddr = AllocatePhysicalPage(DirMap, &TableMapAddr);
       TableMap = (vptr)TableMapAddr;
       SetPAllocTableMapAddr(Entry, TableMapAddr | PAlloc_Present);
       Mem_Set(TableMap, 255, sizeof(palloc_map));
       TableMap->LvlE ^= 1;
-      
-      if(Reallocated) return;
    } else {
       TableMap = GetPAllocTableMap(TableMapAddr);
    }
@@ -868,18 +782,10 @@ FreePhysicalPage(palloc_dir_map *DirMap, pptr Page)
       // Same with Dir and TableMap
       Assert(TableMap->Lvl9[TableIndex >> 3] & (TableIndex & 7));
       
-      u64 TableAddr;
-      b08 Reallocated = FALSE;
-      Status = AllocatePhysicalPage(DirMap, &TableAddr);
-      if(Status == ST_NotFound) {
-         TableAddr = Page;
-         Reallocated = TRUE;
-      }
+      u64 TableAddr = AllocatePhysicalPage(DirMap);
       Entry->Tables[TableIndex] = TableAddr | PAlloc_Present;
       Table = (vptr)TableAddr;
       Mem_Set(Table, 0, sizeof(palloc_table));
-      
-      if(Reallocated) return;
    } else {
       Table = GetPAllocTable(Entry, TableIndex);
    }
@@ -889,19 +795,11 @@ FreePhysicalPage(palloc_dir_map *DirMap, pptr Page)
       // Same with Dir, TableMap, and Table
       Assert(TableMap->Lvl9[TableMapIndex >> 3] & (TableMapIndex & 7));
       
-      u64 PageMapAddr;
-      b08 Reallocated = FALSE;
-      Status = AllocatePhysicalPage(DirMap, &PageMapAddr);
-      if(Status == ST_NotFound) {
-         PageMapAddr = Page;
-         Reallocated = TRUE;
-      }
+      u64 PageMapAddr = AllocatePhysicalPage(DirMap);
       Table->PageMaps[MapIndex] = PageMapAddr | PAlloc_Present;
       PageMap = (vptr)PageMapAddr;
       Mem_Set(PageMap, 255, sizeof(palloc_map));
       PageMap->LvlE ^= 1;
-      
-      if(Reallocated) return;
    } else {
       PageMap = GetPAllocPageMap(Table, MapIndex);
    }
@@ -944,7 +842,9 @@ FreePhysicalPage(palloc_dir_map *DirMap, pptr Page)
       Bit >>= 1;
    }
    
-   //TODO: Delete empty pages
+   // We unfortunately have to iterate over the lowest level of the
+   // bitmap to know if a map page is free, so instead, we'll have a
+   // TODO: scheduled process that will clean up unused pages
 }
 
 #endif

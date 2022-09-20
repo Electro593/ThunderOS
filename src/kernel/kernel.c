@@ -340,8 +340,8 @@ Kernel_Entry(rsdp *RSDP,
    {
       efi_memory_descriptor *FreeBuffer[64];
       efi_memory_descriptor *UsedBuffer[64];
-      b08 FreeBufferFull = FALSE;
-      b08 UsedBufferFull = FALSE;
+      u32 FreeBufferSize = 0;
+      u32 UsedBufferSize = 0;
       u32 FreeWriteCursor = 0;
       u32 UsedWriteCursor = 0;
       u32 FreeReadCursor  = 0;
@@ -364,11 +364,10 @@ Kernel_Entry(rsdp *RSDP,
             case EFI_MemoryType_MappedIOPortSpace:
             case EFI_MemoryType_PalCode:
             case EFI_MemoryType_Unaccepted: {
-               if(!UsedBufferFull) {
+               if(UsedBufferSize < 64) {
                   UsedBuffer[UsedWriteCursor++] = Descriptor;
                   UsedWriteCursor %= 64;
-                  if(UsedWriteCursor == UsedReadCursor)
-                     UsedBufferFull = TRUE;
+                  UsedBufferSize++;
                }
             } break;
             
@@ -377,13 +376,26 @@ Kernel_Entry(rsdp *RSDP,
             case EFI_MemoryType_BootServicesData:
             case EFI_MemoryType_ConventionalMemory:
             case EFI_MemoryType_Persistent: {
-               if(!FreeBufferFull) {
+               if(FreeBufferSize < 64) {
                   FreeBuffer[FreeWriteCursor++] = Descriptor;
                   FreeWriteCursor %= 64;
-                  if(FreeWriteCursor == FreeReadCursor)
-                     FreeBufferFull = TRUE;
+                  FreeBufferSize++;
                }
             } break;
+         }
+         
+         if(UsedBufferSize && FreeBufferSize) {
+            
+         }
+         
+         if(UsedBufferSize == 64) {
+            Assert(!FreeBufferSize);
+            
+            
+         }
+         if(FreeBufferSize == 64) {
+            Assert(!UsedBufferSize);
+            
          }
          
          // UsedBuffer is empty
