@@ -72,8 +72,9 @@ typedef enum cr4_flag {
 } cr4_flag;
 
 #define INCLUDE_HEADER
+   #include <util/math.c>
    #include <util/vector.c>
-   #include <util/mem.c>
+   #include <util/scalar.c>
    
    #include <kernel/efi.h>
    
@@ -101,8 +102,11 @@ extern void SetMSR(u32 Base, u64 Value);
 extern u64  GetCR0(void);
 extern u64  GetCR3(void);
 extern u64  GetCR4(void);
+extern void SetCR3(u64);
 extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
+
+global palloc_dir_map *DirMap;
 
 internal void
 KernelError(c08 *File, u32 Line, c08 *Expression)
@@ -333,25 +337,33 @@ Kernel_Entry(rsdp *RSDP,
       Page = NULL;
    }
    
-   page_dir_map *DirMap = (vptr)PAllocPages;
+   DirMap = (vptr)PAllocPages;
    Mem_Set(DirMap, 0, sizeof(palloc_dir_map));
    
    
-   {
-      efi_memory_descriptor *FreeBuffer[64];
-      efi_memory_descriptor *UsedBuffer[64];
-      u32 FreeBufferSize = 0;
-      u32 UsedBufferSize = 0;
-      u32 FreeWriteCursor = 0;
-      u32 UsedWriteCursor = 0;
-      u32 FreeReadCursor  = 0;
-      u32 UsedReadCursor  = 0;
+   u32 FreeI, UsedI;
+   u64 FreePages = 0, PagesToFree = 0;
+   efi_memory_descriptor *FreeDesc = NULL, *UsedDesc = NULL;
+   while(TRUE) {
+      for(FreeI = 0; !FreePages && FreeI < MemoryDescriptorCount; FreeI++) {
+         efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*FreeI);
+         
+         switch(Descriptor->Type) {
+            case EFI_MemoryType_LoaderCode:
+            case EFI_MemoryType_BootServicesCode:
+            case EFI_MemoryType_BootServicesData:
+            case EFI_MemoryType_ConventionalMemory:
+            case EFI_MemoryType_Persistent: {
+               FreeDesc = Descriptor;
+               FreePages = FreeDesc->PageCount;
+            } break;
+         }
+      }
       
-      //TODO: Sort the descriptors
-      
-      for(u32 I = 0; I < MemoryDescriptorCount; I++) {
+      for(UsedI = 0; !PagesToAlloc && UsedI < MemoryDescriptorCount; UsedI++) {
          efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
          
+         //TODO: Can runtime code be nuked?
          switch(Descriptor->Type) {
             case EFI_MemoryType_Reserved:
             case EFI_MemoryType_LoaderData:
@@ -364,79 +376,36 @@ Kernel_Entry(rsdp *RSDP,
             case EFI_MemoryType_MappedIOPortSpace:
             case EFI_MemoryType_PalCode:
             case EFI_MemoryType_Unaccepted: {
-               if(UsedBufferSize < 64) {
-                  UsedBuffer[UsedWriteCursor++] = Descriptor;
-                  UsedWriteCursor %= 64;
-                  UsedBufferSize++;
-               }
+               UsedDesc = Descriptor;
+               PagesToAlloc = UsedDesc->PageCount;
             } break;
-            
-            case EFI_MemoryType_LoaderCode:
-            case EFI_MemoryType_BootServicesCode:
-            case EFI_MemoryType_BootServicesData:
-            case EFI_MemoryType_ConventionalMemory:
-            case EFI_MemoryType_Persistent: {
-               if(FreeBufferSize < 64) {
-                  FreeBuffer[FreeWriteCursor++] = Descriptor;
-                  FreeWriteCursor %= 64;
-                  FreeBufferSize++;
-               }
-            } break;
-         }
-         
-         if(UsedBufferSize && FreeBufferSize) {
-            
-         }
-         
-         if(UsedBufferSize == 64) {
-            Assert(!FreeBufferSize);
-            
-            
-         }
-         if(FreeBufferSize == 64) {
-            Assert(!UsedBufferSize);
-            
-         }
-         
-         // UsedBuffer is empty
-         if(!UsedBufferFull && UsedReadCursor == UsedWriteCursor)
-            continue;
-         
-         if(UsedBufferFull || I == MemoryDescriptorCount-1) {
-            // No free blocks found yet
-            if(!FreeBufferFull && FreeReadCursor == FreeWriteCursor) {
-               
-               
-               
-               continue;
-            }
-            
-            do {
-               UsedDescriptor = UsedBuffer[UsedReadCursor++];
-               pptr UsedStart = UsedDescriptor->PhysicalStart;
-               u64 UsedCount = UsedDescriptor->PageCount;
-               
-               u32 PAllocCount;
-               GetNumPagesToMapPAllocRange(DirMap, UsedStart, UsedCount, &PAllocCount);
-               
-               while(TRUE) {
-                  FreeDescriptor = FreeBuffer[FreeReadCursor++];
-                  pptr FreeStart = FreeDescriptor->PhysicalStart;
-                  u64 FreeCount = FreeDescriptor->PageCount;
-                  
-                  
-                  
-                  FreeReadCursor &= 64;
-               }
-               
-               
-               
-               UsedReadCursor %= 64;
-            } while(UsedReadCursor != UsedWriteCursor);
-            
-            UsedBufferFull = FALSE;
          }
       }
+      
+      Assert(UsedDesc != NULL);
+      
+      if(!FreePages) {
+         // TODO: Use swap space
+         // Note that FreeDesc can be null here
+         Assert(FALSE);
+      }
+      
+      u64 UsedCount = FreeDesc->PageCount - FreePages;
+      
+      if(!PagesToAlloc) {
+         if(!FreePages) break;
+         
+         vptr FreeBase = FreeDesc->VirtualStart + (UsedCount << 12);
+         FreeVirtualMemoryRange(FreeBase, FreePages, TRUE);
+      }
+      
+      u64 AllocatedCount = UsedDesc->PageCount - PagesToAlloc;
+      pptr UsedBase = UsedDesc->PhysicalStart + (AllocatedCount << 12);
+      pptr FreeBase = FreeDesc->PhysicalStart + (UsedCount << 12);
+      
+      SetPhysicalMemoryRange(DirMap, UsedBase, PagesToAlloc, FreeBase, FreePages, &AllocatedCount, &UsedCount);
+      PagesToAlloc -= AllocatedCount;
+      FreePages -= UsedCount;
    }
    
    InitGOP(GOP);

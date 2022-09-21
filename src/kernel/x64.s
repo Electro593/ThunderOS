@@ -118,6 +118,11 @@ GetCR4:
     mov rax, cr4
     ret
 
+[global SetCR3]
+SetCR3:
+    mov cr3, rdi
+    ret
+
 [global DisableInterrupts]
 DisableInterrupts:
     cli

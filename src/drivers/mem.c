@@ -24,7 +24,8 @@ typedef enum page_table_flags {
    Page_Global         = 0x0000000000000100,
    Page_Restart        = 0x0000000000000800,
    Page_PAT            = 0x0000000000001000,
-   Page_Full           = 0x4000000000000000,
+   Page_OnDisk         = 0x0200000000000000,
+   Page_Full           = 0x0400000000000000,
    Page_ExecuteDisable = 0x8000000000000000,
 } page_table_flags;
 
@@ -243,136 +244,6 @@ MapPAllocPage(pptr Physical, vptr *VirtualOut, u32 *UsedCountOut)
    *UsedCountOut = (Physical - PhysicalStart) >> 12;
 }
 
-/*
-internal thunderos_status
-FindConsecutiveFreePageCount(palloc_map *PageMap, u32 PageIndex, u32 *PageCountOut)
-{
-   if(!PageMap || PageIndex > 16383 || !PageCountOut)
-      return ST_InvalidParameter;
-   
-   u32 Bit = 1;
-   if(PageMap->LvlE & Bit) {
-      *PageCountOut = 0;
-      return ST_Success;
-   }
-   
-   u32 Lvl0Start  = (1 << 14) | PageIndex;
-   u08 *Bytes = &PageMap->LvlE;
-   u32 Start, End = 2;
-   u08 Byte, Mask;
-   
-   for(s32 I = 13; I >= 0; I--) {
-      End <<= 1;
-      Start = Lvl0Start >> I;
-      
-      Byte = Bytes[Start >> 3];
-      Mask = 1 << (Start & 0x7);
-      if(Byte & Mask) {
-         *PageCountOut = 0;
-         return ST_Success;
-      }
-      
-      for(u32 J = Start + 1; J < End; J++) {
-         Byte = Bytes[J >> 3];
-         Mask = 1 << (J & 0x7);
-         if(Byte & Mask) End = J;
-      }
-   }
-   
-   *PageCountOut = End - Lvl0Start;
-   return ST_Success;
-}
-
-internal thunderos_status
-FindConsecutiveFreeEntryCount(palloc_dir_map *DirMap,
-                              u32 DirIndexS, u32 EntryIndexS,
-                              u32 TableIndexS, u32 MapIndexS,
-                              u32 PageIndexS, u64 *PageCountOut)
-{
-   if(!DirMap || DirIndex > 255 || EntryIndex > 15 || !EntryCountOut)
-      return ST_InvalidParameter;
-   
-   u32 Bit = 1;
-   if(DirMap->LvlE & Bit) {
-      *EntryCountOut = 0;
-      return ST_Success;
-   }
-   
-   u64 PageCount = 0;
-   
-   palloc_dir *DirS, *DirE;
-   palloc_dir_entry *EntryS, *EntryE;
-   palloc_table *TableS, *TableE;
-   palloc_map *PageMapS, *PageMapE;
-   u32 DirIndexE, EntryIndexE, TableIndexE, MapIndexE;
-   
-   if(DirMap->Dirs[DirIndexS] & PAlloc_Present) {
-      DirS = (vptr)(DirMap->Dirs[DirIndexS] & 0xFFFFFFFFFFFFF000);
-      
-      if(DirS->Entries[EntryIndexS] & PAlloc_Present) {
-         EntryS = DirS->Entries + EntryIndexS;
-         
-         if(EntryS->Tables[TableIndexS] & PAlloc_Present) {
-            TableS = (vptr)(EntryS->Tables[TableIndexS] & 0xFFFFFFFFFFFFF000);
-            
-            if(TableS->PageMaps[MapIndexS] & PAlloc_Present) {
-               PageMapS = (vptr)(TableS->PageMaps[MapIndexS] & 0xFFFFFFFFFFFFF000);
-               
-               
-            }
-         }
-      }
-   }
-   
-   if(DirMap->Dirs[StartDirIndex] & PAlloc_Present) {
-      palloc_dir *StartDir = (vptr)(DirMap->Dirs[StartDirIndex] & 0xFFFFFFFFFFFFF000);
-      palloc_dir *EndDir = StartDir;
-      
-      
-      
-      
-      
-      u32 EndEntryIndex = StartEntryIndex + 1;
-      for(; EndEntryIndex < 16; EndEntryIndex++) {
-         if(StartDir->Entries[EndEntryIndex] & PAlloc_Present) break;
-      }
-      
-      // Completely free entries in the start dir
-      PageCount += (EndEntryIndex - (StartEntryIndex+1)) * 0x0000010000000000;
-      
-      if(EndEntryIndex == 16) {
-         u32 EndDirIndex = StartDirIndex + 1;
-         for(; EndDirIndex < 256; EndDirIndex++) {
-            if(DirMap->Dirs[EndDirIndex] & PAlloc_Present) break;
-         }
-         
-         // Completely free dirs
-         PageCount += (EndDirIndex - (StartDirIndex+1)) * 0x0000100000000000;
-         
-         if(EndDirIndex == 256) {
-            *PageCountOut = PageCount;
-            return ST_Success;
-         }
-         
-         EndDir = (vptr)(DirMap->Dirs[EndDirIndex] & 0xFFFFFFFFFFFFF000);
-         
-         for(EndEntryIndex = 0; EndEntryIndex < 16; EndEntryIndex++) {
-            if(EndDir->Entries[EndEntryIndex] & PAlloc_Present) break;
-         }
-         
-         Assert(EndEntryIndex != 16);
-         
-         // Completely free entries in the end dir
-         PageCount += EndEntryIndex * 0x0000010000000000;
-      }
-      
-      palloc_dir_entry *EndEntry = EndDir->Entries + EndEntryIndex;
-      PageCount += __PagesInEndEntry;
-      
-   }
-}
-*/
-
 internal void
 SetPAllocPageMapRange(palloc_map *PageMap, u32 Start, u32 Count)
 {
@@ -471,53 +342,43 @@ SetPAllocTableMapAddr(palloc_dir_entry *Entry, u64 TableMapAddr)
    }
 }
 
-/*
-// internal void
-// SetSparsePAllocPageRange(palloc_dir_map *DirMap, pptr Start, u64 Count,
-//                          vptr *ExtraPages, u32 *ExtraPageCount)
-// {
-//    pptr End = Start + ((Count - 1) << 12);
+internal void
+SetSparsePAllocRange(palloc_dir_map *DirMap,
+                     pptr AllocBase, u64 PagesToAlloc,
+                     pptr ExtraBase, u64 ExtraCount,
+                     u64 *AllocatedCountOut, u64 *UsedExtraCountOut)
+{
+   Assert(DirMap && AllocatedCountOut && UsedExtraCountOut);
+   Assert(!(AllocBase & 0xFFF) && !(ExtraBase & 0xFFF));
+   Assert(AllocBase + PagesToAlloc <= 0x0010000000000000);
+   Assert(ExtraBase + ExtraCount <= 0x0010000000000000);
    
-//    Assert(DirMap && End < (1 << 52) && ExtraPageCount);
+   *AllocatedCountOut = 0;
+   *UsedExtraCountOut = 0;
+   if(PagesToAlloc == 0) return;
    
-//    if(Count == 0) {
-//       *ExtraPageCount = 0;
-//       return;
-//    }
+   //TODO: Check for nonexistant pages
    
-//    pptr End = Start + ((PageCount - 1) << 12);
+   pptr Start = AllocBase;
+   pptr End = AllocBase + PagesToAlloc;
    
-//    u32 MapS  = (Start >> 26) & 0x01FF;
-//    u32 MapE  = (End   >> 26) & 0x01FF;
-//    u32 PageS = (Start >> 14) & 0x3FFF;
-//    u32 PageE = (End   >> 14) & 0x3FFF;
+   u32 WholeDirMapStart = (Start & 0x000FFF0000000000) + 0x0000010000000000;
+   u32 WholeDirMapEnd   =  End   & 0x000FFF0000000000;
    
-//    u32 TotalPageMaps = MapE - MapS + 1;
+   if(WholeDirMapStart < WholeDirMapEnd) {
+      SetPAllocDirMapRange(DirMap, WholeDirMapStart, WholeDirMapEnd - WholeDirMapStart);
+   }
    
-//    b08 NeedTable = (Entry->Tables[TableIndex] & PAlloc_Present) == 0;
-   
-//    u64 TableMapAddr;
-//    GetPAllocMapAddr(Entry, &TableMapAddr);
-//    b08 NeedTableMap = (TableMapAddr & PAlloc_Present) == 0;
-   
-//    // If the entire map is nonexistant, 
-//    Assert(!(NeedTableMap && !NeedTable));
-   
-//    u32 NeededPages;
-//    if(NeedTable) {
-//       NeededPages = Need + 1 + TotalPageMaps;
-      
-      
-//    }
-//    if(*ExtraPageCount < NeededPages) {
-//       *ExtraPageCount = NeededPages;
-//       return;
-//    }
+   PageMapStart
+   TableMapStart
+   DirMapStart
+   DirMapMid
+   DirMapEnd
+   TableMapEnd
+   PageMapEnd
    
    
-   
-// }
-*/
+}
 
 internal void
 FindFreePAllocDirEntry(palloc_dir_map *DirMap, u32 *DirIndexOut, u32 *EntryIndexOut)
@@ -845,6 +706,77 @@ FreePhysicalPage(palloc_dir_map *DirMap, pptr Page)
    // We unfortunately have to iterate over the lowest level of the
    // bitmap to know if a map page is free, so instead, we'll have a
    // TODO: scheduled process that will clean up unused pages
+}
+
+internal void
+FreeMapPages(u32 Lvl, u64 Start) {
+   if(Lvl == 0) return;
+   Assert(Lvl > 0);
+   
+   u64 Exp = 9*Lvl + 12;
+   u64 ExpShift = 1 << Exp;
+   u64 ExpMask = ~(ExpShift - 1);
+   Assert(Start == (Start & ExpMask));
+   
+   //TODO: Handle Lvl5 optional
+   
+   for(u32 I = 0; I < 512; I++) {
+      u64 *Entry = (u64*)(((s64)(0xFE00000000000000 | Start) >> (Exp-3)) & ~0x7);
+      if(*Entry & Page_Present) {
+         FreeMapPages(Lvl-1, Start | (I << (Exp-9)));
+         u64 Addr = *Entry & 0x000FFFFFFFFFF000;
+         FreePhysicalPage(DirMap, Addr);
+      }
+   }
+}
+
+internal void
+FreeMapLvl(u32 Lvl, u64 Start, u64 End) {
+   Assert(Lvl >= 0 && Start <= End && !(Start & 0xFFF) && !(End & 0xFFF));
+   
+   if(Lvl == 0) {
+      u64 *Entry = (u64*)(((s64)(0xFE00000000000000 | Start) >> 9) & ~0x7);
+      Mem_Set(Entry, 0, End - Start + sizeof(u64));
+      return;
+   }
+   
+   u64 Exp = 9*Lvl + 12;
+   u64 ExpShift = 1 << Exp;
+   u64 ExpMask = ~(ExpShift - 1);
+   u64 LvlStart = (Start >> Exp) & 0x1FF;
+   u64 LvlEnd = (End >> Exp) & 0x1FF;
+   
+   if(LvlStart == LvlEnd) {
+      FreeMapLvl(Lvl-1, Start, End);
+   } else {
+      u64 WholeStart = (Start + ExpShift) & ExpMask;
+      u64 WholeEnd = End & ExpMask;
+      FreeMapLvl(Lvl-1, Start, WholeStart);
+      FreeMapPages(Lvl, Start);
+      Mem_Set(Entry, 0, (WholeEnd - WholeStart) >> (Exp-3));
+      FreeMapLvl(Lvl-1, WholeEnd, End);
+   }
+}
+
+internal void
+FreeVirtualMemoryRange(vptr Base, u64 PageCount, b08 ReloadCR3)
+{
+   if(PageCount == 0) return;
+   
+   b08 HasLvl5 = ((GetCR4() & CR4_57BitLinearAddress) != 0);
+   if(!HasLvl5) Start |= 0x01FF000000000000;
+   
+   u64 Start = Base;
+   u64 End = Base + ((PageCount - 1) << 12);
+   Assert(!(Start & 0xFFF) && Start <= End);
+   
+   FreeMapLvl(4 + HasLvl5, Start, End);
+   
+   if(ReloadCR3) {
+      SetCR3(GetCR3());
+   } else {
+      Assert(FALSE && "Unimplemented!");
+   }
 }
 
 #endif
