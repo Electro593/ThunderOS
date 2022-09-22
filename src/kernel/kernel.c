@@ -337,75 +337,38 @@ Kernel_Entry(rsdp *RSDP,
       Page = NULL;
    }
    
+   // Initialize as if all pages are being used
    DirMap = (vptr)PAllocPages;
-   Mem_Set(DirMap, 0, sizeof(palloc_dir_map));
+   Mem_Set(DirMap, -1, 1024);
+   Mem_Set(DirMap->Dirs, 0, sizeof(palloc_dir*) * 256);
    
-   
-   u32 FreeI, UsedI;
-   u64 FreePages = 0, PagesToFree = 0;
-   efi_memory_descriptor *FreeDesc = NULL, *UsedDesc = NULL;
-   while(TRUE) {
-      for(FreeI = 0; !FreePages && FreeI < MemoryDescriptorCount; FreeI++) {
-         efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*FreeI);
-         
-         switch(Descriptor->Type) {
-            case EFI_MemoryType_LoaderCode:
-            case EFI_MemoryType_BootServicesCode:
-            case EFI_MemoryType_BootServicesData:
-            case EFI_MemoryType_ConventionalMemory:
-            case EFI_MemoryType_Persistent: {
-               FreeDesc = Descriptor;
-               FreePages = FreeDesc->PageCount;
-            } break;
-         }
+   // 'Free' the memory that's available
+   for(u32 I = 0; I < MemoryDescriptorCount; I++) {
+      efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
+      
+      switch(Descriptor->Type) {
+         /*
+         case EFI_MemoryType_Reserved:
+         case EFI_MemoryType_LoaderData:
+         case EFI_MemoryType_RuntimeServicesCode:
+         case EFI_MemoryType_RuntimeServicesData:
+         case EFI_MemoryType_UnusableMemory:
+         case EFI_MemoryType_ACPIReclaim:
+         case EFI_MemoryType_ACPIMemoryNVS:
+         case EFI_MemoryType_MappedIO:
+         case EFI_MemoryType_MappedIOPortSpace:
+         case EFI_MemoryType_PalCode:
+         case EFI_MemoryType_Unaccepted:
+         */
+         case EFI_MemoryType_LoaderCode:
+         case EFI_MemoryType_BootServicesCode:
+         case EFI_MemoryType_BootServicesData:
+         case EFI_MemoryType_ConventionalMemory:
+         case EFI_MemoryType_Persistent: {
+            FreePhysicalPageRange(Descriptor->PhysicalStart, Descriptor->PageCount);
+            FreeVirtualPageRange(Descriptor->VirtualStart, Descriptor->PageCount);
+         } break;
       }
-      
-      for(UsedI = 0; !PagesToAlloc && UsedI < MemoryDescriptorCount; UsedI++) {
-         efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
-         
-         //TODO: Can runtime code be nuked?
-         switch(Descriptor->Type) {
-            case EFI_MemoryType_Reserved:
-            case EFI_MemoryType_LoaderData:
-            case EFI_MemoryType_RuntimeServicesCode:
-            case EFI_MemoryType_RuntimeServicesData:
-            case EFI_MemoryType_UnusableMemory:
-            case EFI_MemoryType_ACPIReclaim:
-            case EFI_MemoryType_ACPIMemoryNVS:
-            case EFI_MemoryType_MappedIO:
-            case EFI_MemoryType_MappedIOPortSpace:
-            case EFI_MemoryType_PalCode:
-            case EFI_MemoryType_Unaccepted: {
-               UsedDesc = Descriptor;
-               PagesToAlloc = UsedDesc->PageCount;
-            } break;
-         }
-      }
-      
-      Assert(UsedDesc != NULL);
-      
-      if(!FreePages) {
-         // TODO: Use swap space
-         // Note that FreeDesc can be null here
-         Assert(FALSE);
-      }
-      
-      u64 UsedCount = FreeDesc->PageCount - FreePages;
-      
-      if(!PagesToAlloc) {
-         if(!FreePages) break;
-         
-         vptr FreeBase = FreeDesc->VirtualStart + (UsedCount << 12);
-         FreeVirtualMemoryRange(FreeBase, FreePages, TRUE);
-      }
-      
-      u64 AllocatedCount = UsedDesc->PageCount - PagesToAlloc;
-      pptr UsedBase = UsedDesc->PhysicalStart + (AllocatedCount << 12);
-      pptr FreeBase = FreeDesc->PhysicalStart + (UsedCount << 12);
-      
-      SetPhysicalMemoryRange(DirMap, UsedBase, PagesToAlloc, FreeBase, FreePages, &AllocatedCount, &UsedCount);
-      PagesToAlloc -= AllocatedCount;
-      FreePages -= UsedCount;
    }
    
    InitGOP(GOP);
