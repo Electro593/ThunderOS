@@ -128,7 +128,8 @@ typedef struct page_map_lvl4 {
 //
 
 typedef enum palloc_flags {
-   PAlloc_Present = 0x01,
+   PAlloc_Present     = 0x001,
+   PAlloc_TableMapRes = 0xC00,
 } palloc_flags;
 
 typedef struct palloc_map {
@@ -188,7 +189,7 @@ typedef struct palloc_dir_map {
 #ifdef INCLUDE_SOURCE
 
 #define GetPAllocDirEntry(Dir, Index)     (Dir->Entries + Index)
-#define GetPAllocDir(DirMap, Index)       (vptr)(DirMap->Dirs[Index]    & 0xFFFFFFFFFFFFF000)
+#define GetPAllocDir(Index)               (vptr)(DirMap->Dirs[Index]    & 0xFFFFFFFFFFFFF000)
 #define GetPAllocTableMap(Address)        (vptr)(Address                & 0xFFFFFFFFFFFFF000)
 #define GetPAllocTable(Entry, Index)      (vptr)(Entry->Tables[Index]   & 0xFFFFFFFFFFFFF000)
 #define GetPAllocPageMap(Table, Index)    (vptr)(Table->PageMaps[Index] & 0xFFFFFFFFFFFFF000)
@@ -678,11 +679,7 @@ ClearDirMapRange(u32 Start, u32 Count)
    Assert(Start+Count <= 0x1000);
    if(Count == 0) return;
    
-   for(u32 I = Start >> 4; I < Count >> 4; I++) {
-      
-   }
-   
-   if(Count == 4096) {
+   if(Count == 0x1000) {
       DirMap->LvlE = 0xFE;
       Mem_Set(DirMap->Lvl9, 0, 1023);
       return;
@@ -695,6 +692,43 @@ ClearDirMapRange(u32 Start, u32 Count)
    u08 *Bytes = &PageMap->LvlE;
    
    for(u32 I = 0; I < 12; I++) {
+      ByteIS = Start >> 3;
+      ByteIE = End   >> 3;
+      MaskS =   0xFF << (Start & 7);
+      MaskE = ~(0xFE << (End   & 7));
+      ByteS = Bytes + ByteIS;
+      if(ByteIS == ByteIE)
+         *ByteS &= ~(MaskS & MaskE);
+      else {
+         *ByteS &= ~MaskS;
+         Mem_Set(ByteS+1, 0, ByteIE-ByteIS-1);
+         ByteE = Bytes + ByteIE;
+         *ByteE &= ~MaskE;
+      }
+      Start >>= 1;
+      End >>= 1;
+   }
+}
+
+internal void
+ClearPageMapRange(u32 Start, u32 Count)
+{
+   Assert(Start+Count <= 0x4000);
+   if(Count == 0) return;
+   
+   if(Count == 0x4000) {
+      DirMap->LvlE = 0xFE;
+      Mem_Set(DirMap->Lvl11, 0, 4095);
+      return;
+   }
+   
+   Start |= 0x4000;
+   u32 ByteIS, ByteIE, *ByteS, *ByteE;
+   u08 MaskS, MaskE;
+   u32 End = Start + Count - 1;
+   u08 *Bytes = &PageMap->LvlE;
+   
+   for(u32 I = 0; I < 14; I++) {
       ByteIS = Start >> 3;
       ByteIE = End   >> 3;
       MaskS =   0xFF << (Start & 7);
@@ -745,28 +779,20 @@ FreePhysicalPageRange(pptr Base, u64 Count)
    u32 LeftDirCapEnd   = (SameDir)   ? EndDirMapIndex   : 0x4000;
    u32 LeftTableCapEnd = (SameTable) ? EndTableMapIndex : 0x4000;
    
-   b08 HasLeftDirCap    = !!(Start & 0x000000FFFFFFF000);
+   b08 HasLeftEntryCap  = !!(Start & 0x000000FFFFFFF000);
+   b08 HasLeftDirCap    = !!(Start & 0x00000FFFFFFFF000);
    b08 HasRightDirCap   = (End & 0x000000FFFFFFF000) && !SameDir;
    b08 HasLeftTableCap  = !!(Start & 0x0000000003FFF000);
    b08 HasRightTableCap = !!(End   & 0x0000000003FFF000);
    
-   //TODO: Make sure to get rid of previous PAlloc pages too
    ClearDirMapRange(StartDirMapIndex, EndDirMapIndex - StartDirMapIndex);
    
-   if(HasLeftDirCap) {
+   if(HasLeftEntryCap) {
       palloc_dir *Dir = GetOrCreatePAllocDir(StartDirIndex);
       palloc_dir_entry *Entry = GetPAllocDirEntry(Dir, StartEntryIndex);
+      //TODO: Make sure to clear this to zero
       palloc_map *TableMap = GetOrCreatePAllocTableMap(Entry, TRUE);
       
-      //TODO: Make sure to clear this to zero
-      ClearTableMapRange(StartTableMap, StartTableMapIndex, LeftDirCapEnd - StartTableMapIndex);
-      
-      if(HasLeftTableCap) {
-         palloc_table *Table = GetOrCreatePAllocTable(Entry, StartTableIndex);
-         palloc_map *PageMap = GetOrCreatePAllocPageMap(Table, StartMapIndex);
-         
-         ClearPageMapRange(PageMap, StartPageMapIndex, LeftTableCapEnd - StartPageMapIndex);
-      }
    }
    
    if(HasRightDirCap) {
@@ -774,13 +800,80 @@ FreePhysicalPageRange(pptr Base, u64 Count)
       palloc_dir_entry *Entry = GetPAllocDirEntry(Dir, EndEntryIndex - 1);
       palloc_map *TableMap = GetOrCreatePAllocTableMap(Entry, TRUE);
       
-      ClearTableMapRange(TableMap, 0, EndTableMapIndex);
+   }
+   
+   // Eesh...
+   for(u32 D = StartDirIndex; D < EndDirIndex; D++) {
+      if(!(DirMap->Dirs[D] & PAlloc_Present)) continue;
+      palloc_dir *Dir = GetPAllocDir(D);
       
-      if(HasRightTableCap) {
-         palloc_table *Table = GetOrCreatePAllocTable(Entry, EndTableIndex);
-         palloc_map *PageMap = GetOrCreatePAllocPageMap(Table, EndMapIndex);
+      b08 IsLeftDirCap  = HasLeftDirCap  && D == StartDirIndex;
+      b08 IsRightDirCap = HasRightDirCap && D == EndDirIndex-1;
+      u32 EMin = (IsLeftDirCap) ? StartEntryIndex : 0;
+      u32 EMax = (IsRightDirCap) ? EndEntryIndex : 16; // Haha, EMacs
+      
+      for(u32 E = EMin; E < EMax; E++) {
+         palloc_dir_entry *Entry = GetPAllocDirEntry(Dir, E);
+         u64 TableMapAddr = GetPAllocTableMapAddr(Entry);
+         if(!(TableMapAddr & PAlloc_Present)) continue;
+         palloc_map *TableMap = GetPAllocTableMap(TableMapAddr);
          
-         ClearPageMapRange(PageMap, 0, EndPageMapIndex);
+         b08 IsLeftEntryCap  = IsLeftDirCap  && HasLeftEntryCap  && E == EMin;
+         b08 IsRightEntryCap = IsRightDirCap && HasRightEntryCap && E == EMax-1;
+         u32 TMin = (IsLeftEntryCap) ? StartTableIndex : 0;
+         u32 TMax = (IsRightEntryCap) ? EndTableIndex : 32;
+         
+         for(u32 T = TMin; T < TMax; T++) {
+            if(!(Entry->Tables[T] & PAlloc_Present)) continue;
+            palloc_table *Table = GetPAllocTable(Entry, T);
+            
+            b08 IsLeftTableCap  = IsLeftEntryCap  && HasLeftTableCap  && T == TMin;
+            b08 IsRightTableCap = IsRightEntryCap && HasRightTableCap && T == TMax-1;
+            u32 MMin = (IsLeftTableCap) ? StartMapIndex : 0;
+            u32 MMax = (IsRightTableCap) ? EndMapIndex : 512;
+            
+            for(u32 M = MMin; M < MMax; M++) {
+               if(!(Table->PageMaps[M] & PAlloc_Present)) continue;
+               palloc_map *PageMap = GetOrCreatePAllocPageMap(Table, M);
+               
+               b08 IsLeftMapCap  = IsLeftTableCap  && HasLeftMapCap  && M == MMin;
+               b08 IsRightMapCap = IsRightTableCap && HasRightMapCap && M == MMax-1;
+               
+               if(SamePageMap) {
+                  ClearPageMapRange(PageMap, StartPageIndex, EndPageIndex - StartPageIndex);
+               } else if(!IsLeftMapCap && !IsRightMapCap) {
+                  //TODO: Unmap this page
+                  Table->PageMaps[M] = 0;
+               } else {
+                  if(IsLeftMapCap)
+                     ClearPageMapRange(PageMap, StartPageIndex, 0x4000 - StartPageIndex);
+                  if(IsRightMapCap)
+                     ClearPageMapRange(PageMap, 0, EndPageIndex);
+               }
+            }
+            
+            if(!IsLeftTableCap && !IsRightTableCap) {
+               //TODO: Unmap this page
+               Entry->Tables[T] &= PAlloc_TableMapRes;
+            }
+         }
+         
+         if(SameTable) {
+            //IMPORTANT //TODO: Fill this in and make sure it works with partial tables
+         } else if(!IsLeftEntryCap && !IsRightEntryCap) {
+            //TODO: Unmap this page
+            SetPAllocTableMap(Entry, 0);
+         } else {
+            if(IsLeftEntryCap)
+               ClearTableMapRange(StartTableMap, StartTableMapIndex, LeftDirCapEnd - StartTableMapIndex);
+            if(IsRightEntryCap)
+               ClearTableMapRange(TableMap, 0, EndTableMapIndex);
+         }
+      }
+      
+      if(EMin == 0 && EMax == 16) {
+         //TODO: Unmap this page
+         DirMap->Dirs[D] = 0;
       }
    }
 }
