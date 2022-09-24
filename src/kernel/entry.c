@@ -80,8 +80,7 @@ typedef u32
                 efi_memory_descriptor *MemoryMap,
                 u64 MemoryMapDescriptorSize,
                 u32 MemoryMapDescriptorCount,
-                vptr PAllocPage1,
-                vptr PAllocPage2);
+                vptr PAllocPages);
 
 internal void
 U64_ToStr(c16 *Buffer, u64 N, u32 Radix) {
@@ -373,7 +372,7 @@ EFI_Entry(u64 LoadBase,
     Status = BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
     SASSERT(EFI_Status_Success, u"ERROR: Could not exit boot services\r\n");
     
-    Status = ((kernel_entry)KernelEntryAddress)(RSDP, GOP, PRBIP, SFSP, MemoryMap, MemoryMapDescriptorSize, MemoryMapSize/MemoryMapDescriptorSize, MinAddress+(PageCount*4096)));
+    Status = ((kernel_entry)KernelEntryAddress)(RSDP, GOP, PRBIP, SFSP, MemoryMap, MemoryMapDescriptorSize, MemoryMapSize/MemoryMapDescriptorSize, (vptr)(MinAddress+(PageCount*4096)));
     return Status;
     
     

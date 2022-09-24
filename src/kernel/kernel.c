@@ -72,7 +72,7 @@ typedef enum cr4_flag {
 } cr4_flag;
 
 #define INCLUDE_HEADER
-   #include <util/math.c>
+   #include <util/mem.c>
    #include <util/vector.c>
    #include <util/scalar.c>
    
@@ -343,30 +343,31 @@ Kernel_Entry(rsdp *RSDP,
    Mem_Set(DirMap->Dirs, 0, sizeof(palloc_dir*) * 256);
    
    // 'Free' the memory that's available
-   for(u32 I = 0; I < MemoryDescriptorCount; I++) {
+   for(u32 I = 0; I < MemoryMapDescriptorCount; I++) {
       efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
       
       switch(Descriptor->Type) {
-         /*
          case EFI_MemoryType_Reserved:
          case EFI_MemoryType_LoaderData:
          case EFI_MemoryType_RuntimeServicesCode:
          case EFI_MemoryType_RuntimeServicesData:
-         case EFI_MemoryType_UnusableMemory:
+         case EFI_MemoryType_Unusable:
          case EFI_MemoryType_ACPIReclaim:
          case EFI_MemoryType_ACPIMemoryNVS:
          case EFI_MemoryType_MappedIO:
          case EFI_MemoryType_MappedIOPortSpace:
          case EFI_MemoryType_PalCode:
          case EFI_MemoryType_Unaccepted:
-         */
+         default:
+            break;
+         
          case EFI_MemoryType_LoaderCode:
          case EFI_MemoryType_BootServicesCode:
          case EFI_MemoryType_BootServicesData:
-         case EFI_MemoryType_ConventionalMemory:
+         case EFI_MemoryType_Conventional:
          case EFI_MemoryType_Persistent: {
-            FreePhysicalPageRange(Descriptor->PhysicalStart, Descriptor->PageCount);
-            FreeVirtualPageRange(Descriptor->VirtualStart, Descriptor->PageCount);
+            FreePhysicalPageRange((pptr)Descriptor->PhysicalStart, Descriptor->PageCount);
+            FreeVirtualPageRange(Descriptor->VirtualStart, Descriptor->PageCount, TRUE);
          } break;
       }
    }
