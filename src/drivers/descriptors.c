@@ -101,23 +101,26 @@ GDT_Init(IN gdt *GDT, IN tss *TSS, vptr *RingStacks, vptr *ISTStacks)
    TSS->RSP2L = (u64)RingStacks[2] & 0xFFFFFFFF;
    TSS->RSP2H = (u64)RingStacks[2] >> 32;
    TSS->_Reserved1 = 0;
-   TSS->IST1L = (u64)ISTStacks[0] & 0xFFFFFFFF;
-   TSS->IST1H = (u64)ISTStacks[0] >> 32;
-   TSS->IST2L = (u64)ISTStacks[1] & 0xFFFFFFFF;
-   TSS->IST2H = (u64)ISTStacks[1] >> 32;
-   TSS->IST3L = (u64)ISTStacks[2] & 0xFFFFFFFF;
-   TSS->IST3H = (u64)ISTStacks[2] >> 32;
-   TSS->IST4L = (u64)ISTStacks[3] & 0xFFFFFFFF;
-   TSS->IST4H = (u64)ISTStacks[3] >> 32;
-   TSS->IST5L = (u64)ISTStacks[4] & 0xFFFFFFFF;
-   TSS->IST5H = (u64)ISTStacks[4] >> 32;
-   TSS->IST6L = (u64)ISTStacks[5] & 0xFFFFFFFF;
-   TSS->IST6H = (u64)ISTStacks[5] >> 32;
-   TSS->IST7L = (u64)ISTStacks[6] & 0xFFFFFFFF;
-   TSS->IST7H = (u64)ISTStacks[6] >> 32;
+   TSS->IST1L = ((u64)ISTStacks[0] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST1H = ((u64)ISTStacks[0] + 0x1000) >> 32;
+   TSS->IST2L = ((u64)ISTStacks[1] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST2H = ((u64)ISTStacks[1] + 0x1000) >> 32;
+   TSS->IST3L = ((u64)ISTStacks[2] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST3H = ((u64)ISTStacks[2] + 0x1000) >> 32;
+   TSS->IST4L = ((u64)ISTStacks[3] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST4H = ((u64)ISTStacks[3] + 0x1000) >> 32;
+   TSS->IST5L = ((u64)ISTStacks[4] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST5H = ((u64)ISTStacks[4] + 0x1000) >> 32;
+   TSS->IST6L = ((u64)ISTStacks[5] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST6H = ((u64)ISTStacks[5] + 0x1000) >> 32;
+   TSS->IST7L = ((u64)ISTStacks[6] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST7H = ((u64)ISTStacks[6] + 0x1000) >> 32;
    TSS->_Reserved2 = 0;
    TSS->_Reserved3 = 0;
-   TSS->IOMapOffset = sizeof(tss);
+   TSS->IOMapOffset = 0x0068;
+   
+   u08 *IOMap = (u08*)TSS + TSS->IOMapOffset;
+   *(u16*)IOMap = 0xFFFF;
    
    SetGDTR(GDT, sizeof(gdt)-1);
 }
@@ -134,7 +137,7 @@ IDT_SetEntry(idt *IDT, u32 Index, vptr Handler)
    IDT->Entries[Index].OffsetP3 = (u32)(Address>>32);
    IDT->Entries[Index].SegmentSelector = 0x08;
    IDT->Entries[Index].ISTOffset = 0;
-   IDT->Entries[Index].Attributes = 0b10001111;
+   IDT->Entries[Index].Attributes = 0b10001110;
    IDT->Entries[Index]._Reserved = 0;
 }
 

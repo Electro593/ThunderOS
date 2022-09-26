@@ -47,7 +47,9 @@ Mem_Set(vptr Dest,
     
     // TODO: Check for SSE
     u64 *Dest64 = (u64*)Dest;
-    u64 Data64 = ((u64)Data<<56)|((u64)Data<<48)|((u64)Data<<40)|((u64)Data<<32)|((u64)Data<<24)|((u64)Data<<16)|((u64)Data<<8)|Data;
+    u16 Data16 = ((u16)Data << 8) | Data;
+    u32 Data32 = ((u32)Data16 << 16) | Data16;
+    u64 Data64 = ((u64)Data32 << 32) | Data32;
     while(Size >= 8) {
         *Dest64++ = Data64;
         Size -= 8;

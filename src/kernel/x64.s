@@ -133,6 +133,11 @@ EnableInterrupts:
     sti
     ret
 
+[global InvalidateTLBEntry]
+InvalidateTLBEntry:
+    invlpg [rdi]
+    ret
+
 ; TODO: Make this just a number
 [global GetInterruptStep]
 GetInterruptStep:
@@ -226,17 +231,22 @@ InterruptSwitch:
     push rbx
     push rax
     
-    mov rdi, [rsp + 128]
-    lea rdx, [InterruptHandlers + rdi*8]
+    xor rdx, rdx
+    mov dl, [rsp + 128]
+    mov ecx, edx
+    and ecx, 0x1F
+    
+    mov rdx, [InterruptHandlers + rdi*8]
     call rdx
     
-    mov eax, [APICBase + 0x300]
-    shr eax, 8
-    and eax, 7
-    cmp eax, 1
-    jle .no_eoi
+    mov eax, [APICBase + 0x100]
+    mov ebx, 1
+    shl ebx, ecx
+    and eax, ebx
+    cmp eax, 0
+    je .no_eoi
         lea rax, [APICBase + 0x0B0]
-        mov [rax], dword 0
+        mov [rax], dword 1
     .no_eoi:
     
     pop rax

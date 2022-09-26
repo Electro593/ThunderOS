@@ -105,6 +105,7 @@ extern u64  GetCR4(void);
 extern void SetCR3(u64);
 extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
+extern void InvalidateTLBEntry(vptr Address);
 
 global palloc_dir_map *DirMap;
 
@@ -319,6 +320,7 @@ Kernel_Entry(rsdp *RSDP,
    
    DisableInterrupts();
    
+   u64 Addr = (u64)&InterruptHandlers;
    
    u64 CR0 = GetCR0();
    u64 CR3 = GetCR3();
@@ -326,16 +328,6 @@ Kernel_Entry(rsdp *RSDP,
    
    //TODO: Guarantee the existance of a map set at 0
    //TODO: Guarantee that CR3 is recursively mapped.
-   if(CR4 & CR4_57BitLinearAddress) {
-      // TODO
-   } else {
-      page_map_lvl4 *Lvl4  = (vptr)(CR3 & 0xFFFFFFFFFFFFF000);
-      page_map_lvl3 *Lvl3  = (vptr)(Lvl4->Entries[0] & 0x000FFFFFFFFFF000);
-      page_directory *Lvl2 = (vptr)(Lvl3->Entries[0] & 0x000FFFFFFFFFF000);
-      page_table *Lvl1     = (vptr)(Lvl2->Entries[0] & 0x000FFFFFFFFFF000);
-      vptr Page            = (vptr)(Lvl1->Entries[0] & 0x000FFFFFFFFFF000);
-      Page = NULL;
-   }
    
    // Initialize as if all pages are being used
    DirMap = (vptr)PAllocPages;
@@ -343,34 +335,34 @@ Kernel_Entry(rsdp *RSDP,
    Mem_Set(DirMap->Dirs, 0, sizeof(palloc_dir*) * 256);
    
    // 'Free' the memory that's available
-   for(u32 I = 0; I < MemoryMapDescriptorCount; I++) {
-      efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
+//    for(u32 I = 0; I < MemoryMapDescriptorCount; I++) {
+//       efi_memory_descriptor *Descriptor = (vptr)((u08*)MemoryMap + MemoryMapDescriptorSize*I);
       
-      switch(Descriptor->Type) {
-         case EFI_MemoryType_Reserved:
-         case EFI_MemoryType_LoaderData:
-         case EFI_MemoryType_RuntimeServicesCode:
-         case EFI_MemoryType_RuntimeServicesData:
-         case EFI_MemoryType_Unusable:
-         case EFI_MemoryType_ACPIReclaim:
-         case EFI_MemoryType_ACPIMemoryNVS:
-         case EFI_MemoryType_MappedIO:
-         case EFI_MemoryType_MappedIOPortSpace:
-         case EFI_MemoryType_PalCode:
-         case EFI_MemoryType_Unaccepted:
-         default:
-            break;
+//       switch(Descriptor->Type) {
+//          case EFI_MemoryType_Reserved:
+//          case EFI_MemoryType_LoaderData:
+//          case EFI_MemoryType_RuntimeServicesCode:
+//          case EFI_MemoryType_RuntimeServicesData:
+//          case EFI_MemoryType_Unusable:
+//          case EFI_MemoryType_ACPIReclaim:
+//          case EFI_MemoryType_ACPIMemoryNVS:
+//          case EFI_MemoryType_MappedIO:
+//          case EFI_MemoryType_MappedIOPortSpace:
+//          case EFI_MemoryType_PalCode:
+//          case EFI_MemoryType_Unaccepted:
+//          default:
+//             break;
          
-         case EFI_MemoryType_LoaderCode:
-         case EFI_MemoryType_BootServicesCode:
-         case EFI_MemoryType_BootServicesData:
-         case EFI_MemoryType_Conventional:
-         case EFI_MemoryType_Persistent: {
-            FreePhysicalPageRange((pptr)Descriptor->PhysicalStart, Descriptor->PageCount);
-            FreeVirtualPageRange(Descriptor->VirtualStart, Descriptor->PageCount, TRUE);
-         } break;
-      }
-   }
+//          case EFI_MemoryType_LoaderCode:
+//          case EFI_MemoryType_BootServicesCode:
+//          case EFI_MemoryType_BootServicesData:
+//          case EFI_MemoryType_Conventional:
+//          case EFI_MemoryType_Persistent: {
+//             FreePhysicalPageRange((pptr)Descriptor->PhysicalStart, Descriptor->PageCount);
+//             FreeVirtualPageRange(Descriptor->VirtualStart, Descriptor->PageCount, TRUE);
+//          } break;
+//       }
+//    }
    
    InitGOP(GOP);
    
@@ -434,6 +426,9 @@ Kernel_Entry(rsdp *RSDP,
       Serial_Write(SerialPort, "\r\n");
    }
    
+   u64 *Ptr = (u64*)0xFFFFFFFF;
+   *Ptr = 5;
+   
    Serial_Write(SerialPort, "CR0: ");
    Serial_Write(SerialPort, U64_ToStr(Buffer, CR0, 16));
    Serial_Write(SerialPort, "\r\nCR3: ");
@@ -441,9 +436,6 @@ Kernel_Entry(rsdp *RSDP,
    Serial_Write(SerialPort, "\r\nCR4: ");
    Serial_Write(SerialPort, U64_ToStr(Buffer, CR4, 16));
    Serial_Write(SerialPort, "\r\n");
-   
-   // u64 *Ptr = (u64*)0x0000FFFFFFFFFFFF;
-   // *Ptr = 5;
    
    while(1);
    

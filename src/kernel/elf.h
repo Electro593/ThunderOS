@@ -23,9 +23,23 @@ typedef struct elf64_relocation {
 // Types for ELF64_R_TYPE(Info)
 #define R_X86_64_RELATIVE   8 // Adjust by program base
 
+enum elf_header_type {
+    ELF_HeaderType_None = 0,
+    ELF_HeaderType_Rel  = 1,
+    ELF_HeaderType_Exec = 2,
+    ELF_HeaderType_Dyn  = 3,
+    ELF_HeaderType_Code = 4
+};
+
 enum elf_program_header_type {
-    ELF_ProgramHeaderType_Null,
-    ELF_ProgramHeaderType_Load,
+    ELF_ProgramHeaderType_Null          = 0,
+    ELF_ProgramHeaderType_Load          = 1,
+    ELF_ProgramHeaderType_Dynamic       = 2,
+    ELF_ProgramHeaderType_Interp        = 3,
+    ELF_ProgramHeaderType_Note          = 4,
+    ELF_ProgramHeaderType_SHLIB         = 5,
+    ELF_ProgramHeaderType_ProgramHeader = 6,
+    ELF_ProgramHeaderType_TLS           = 7,
 };
 
 typedef struct elf64_header {

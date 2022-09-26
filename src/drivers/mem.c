@@ -193,13 +193,35 @@ typedef struct palloc_dir_map {
 #ifdef INCLUDE_SOURCE
 
 #define GetPAllocDir(Index)               (vptr)((u64)DirMap->Dirs[Index]    & 0xFFFFFFFFFFFFF000)
-
-#if 0
-
 #define GetPAllocDirEntry(Dir, Index)     (Dir->Entries + Index)
 #define GetPAllocTableMap(Address)        (vptr)((u64)Address                & 0xFFFFFFFFFFFFF000)
 #define GetPAllocTable(Entry, Index)      (vptr)((u64)Entry->Tables[Index]   & 0xFFFFFFFFFFFFF000)
 #define GetPAllocPageMap(Table, Index)    (vptr)((u64)Table->PageMaps[Index] & 0xFFFFFFFFFFFFF000)
+
+internal u64
+GetPAllocTableMapAddr(palloc_dir_entry *Entry)
+{
+   Assert(Entry);
+   
+   u64 TableMapAddr = 0;
+   for(u32 I = 0; I < 32; I++)
+      TableMapAddr = (TableMapAddr << 2) | (((u64)Entry->Tables[I] >> 10) & 3);
+   
+   return TableMapAddr;
+}
+
+internal void
+SetPAllocTableMapAddr(palloc_dir_entry *Entry, u64 TableMapAddr)
+{
+   Assert(Entry);
+   
+   for(u32 I = 0; I < 32; I++) {
+      u32 Value = (TableMapAddr >> (62 - 2*I)) & 0x3;
+      Entry->Tables[I] = (vptr)(((u64)Entry->Tables[I] & ~PAlloc_TableMapRes) | (Value << 10));
+   }
+}
+
+#if 0
 
 // Different to avoid infinite recursion. Instead of allocating extra
 // page tables from AllocatePhysicalPage, it assumes there are free
@@ -330,29 +352,6 @@ SetPAllocDirMapRange(u32 Start, u32 Count)
       }
       Start >>= 1;
       End >>= 1;
-   }
-}
-
-internal u64
-GetPAllocTableMapAddr(palloc_dir_entry *Entry)
-{
-   Assert(Entry);
-   
-   u64 TableMapAddr = 0;
-   for(u32 I = 0; I < 32; I++)
-      TableMapAddr = (TableMapAddr << 2) | (((u64)Entry->Tables[I] >> 10) & 3);
-   
-   return TableMapAddr;
-}
-
-internal void
-SetPAllocTableMapAddr(palloc_dir_entry *Entry, u64 TableMapAddr)
-{
-   Assert(Entry);
-   
-   for(u32 I = 0; I < 32; I++) {
-      u32 Value = (TableMapAddr >> (62 - 2*I)) & 0x3;
-      Entry->Tables[I] = (vptr)(((u64)Entry->Tables[I] & ~PAlloc_TableMapRes) | (Value << 10));
    }
 }
 
@@ -773,8 +772,53 @@ FreePhysicalPageRange(pptr Base, u64 Count)
 
 #endif
 
+internal vptr
+AllocateVirtualPage(void)
+{
+   return NULL;
+}
+
+internal pptr
+AllocatePhysicalPage(void)
+{
+   return 0;
+}
+
+internal void
+MapPage(vptr VirtualAddress, pptr PhysicalAddress)
+{
+   Assert(!(PhysicalAddress & 0xFFF) && !((u64)VirtualAddress & 0xFFF));
+   
+   b08 HasLvl5 = ((GetCR4() & CR4_57BitLinearAddress) != 0);
+   u64 Virt = (u64)VirtualAddress;
+   u64 EntryAddr = 0xFFFFFFFFFFFFFFF8;
+   
+   for(s32 I = 4+HasLvl5; I > 0; I--) {
+      EntryAddr = (EntryAddr << 9) | ((Virt >> (9*I)) & 0xFF8);
+      u64 *Entry = (u64*)EntryAddr;
+      
+      if(!(*Entry & Page_Present)) {
+         pptr Phys;
+         if(I > 1) {
+            Phys = AllocatePhysicalPage();
+         } else {
+            Phys = PhysicalAddress;
+            
+            // Ensure canonicality
+            if(HasLvl5 && !(EntryAddr & 0x0000800000000000))
+               EntryAddr &= 0x00007FFFFFFFFFFF;
+            else if(!HasLvl5 && !(EntryAddr & 0x0000004000000000))
+               EntryAddr &= 0x0000003FFFFFFFFF;
+         }
+         
+         *Entry = Phys | Page_Present;
+         InvalidateTLBEntry((vptr)(EntryAddr << 9));
+      }
+   }
+}
+
 internal palloc_dir *
-GetOrCreatePAllocDir(u32 DirIndex, b08 Clear)
+GetOrCreatePAllocDir(u64 DirIndex)
 {
    Assert(DirIndex < 0x100);
    
@@ -785,8 +829,7 @@ GetOrCreatePAllocDir(u32 DirIndex, b08 Clear)
    vptr VirtualAddress = AllocateVirtualPage();
    MapPage(VirtualAddress, PhysicalAddress);
    
-   if(Clear) Mem_Set(VirtualAddress,  0, sizeof(palloc_dir));
-   else      Mem_Set(VirtualAddress, -1, sizeof(palloc_dir));
+   Mem_Set(VirtualAddress, 0, sizeof(palloc_dir));
    
    DirMap->Dirs[DirIndex] = (vptr)((u64)VirtualAddress | PAlloc_Present);
    
@@ -794,9 +837,9 @@ GetOrCreatePAllocDir(u32 DirIndex, b08 Clear)
 }
 
 internal palloc_map *
-GetOrCreatePAllocTableMap(u32 DirMapIndex, palloc_dir_entry *Entry, b08 Clear)
+GetOrCreatePAllocTableMap(u64 DirMapIndex, palloc_dir_entry *Entry, b08 Clear)
 {
-   Assert(DirIndex < 0x1000);
+   Assert(DirMapIndex < 0x1000);
    
    u64 Addr = GetPAllocTableMapAddr(Entry);
    
@@ -810,27 +853,48 @@ GetOrCreatePAllocTableMap(u32 DirMapIndex, palloc_dir_entry *Entry, b08 Clear)
    if(Clear) Mem_Set(VirtualAddress,  0, sizeof(palloc_map));
    else      Mem_Set(VirtualAddress, -1, sizeof(palloc_map));
    
-   SetPAllocTableMapAddr((u64)VirtualAddress | PAlloc_Present);
+   SetPAllocTableMapAddr(Entry, (u64)VirtualAddress | PAlloc_Present);
    
    return VirtualAddress;
 }
 
-internal palloc_dir *
-GetOrCreatePAllocTable(u32 DirMapIndex, u32 TableIndex, palloc_entry *Entry, b08 Clear)
+internal palloc_table *
+GetOrCreatePAllocTable(u64 DirMapIndex, u64 TableIndex, palloc_dir_entry *Entry)
 {
    Assert(DirMapIndex < 0x1000 && TableIndex < 0x20);
    
    if((u64)Entry->Tables[TableIndex] & PAlloc_Present)
       return GetPAllocTable(Entry, TableIndex);
    
-   pptr PhysicalAddress = (DirIndex << 44) + 0x3000;
+   pptr PhysicalAddress = ((DirMapIndex << 40) | (TableIndex << 35)) + 0x1000;
    vptr VirtualAddress = AllocateVirtualPage();
    MapPage(VirtualAddress, PhysicalAddress);
    
-   if(Clear) Mem_Set(VirtualAddress,  0, sizeof(palloc_dir));
-   else      Mem_Set(VirtualAddress, -1, sizeof(palloc_dir));
+   Mem_Set(VirtualAddress, 0, sizeof(palloc_table));
    
-   DirMap->Dirs[DirIndex] = (vptr)((u64)VirtualAddress | PAlloc_Present);
+   Entry->Tables[TableIndex] = (vptr)((u64)VirtualAddress | PAlloc_Present);
+   
+   return VirtualAddress;
+}
+
+internal palloc_map *
+GetOrCreatePAllocPageMap(u64 DirMapIndex, u64 TableMapIndex, palloc_table *Table, b08 Clear)
+{
+   Assert(DirMapIndex < 0x1000 && TableMapIndex < 0x4000);
+   
+   u64 MapIndex = TableMapIndex & 0x1FF;
+   
+   if((u64)Table->PageMaps[MapIndex] & PAlloc_Present)
+      return GetPAllocPageMap(Table, MapIndex);
+   
+   pptr PhysicalAddress = ((DirMapIndex << 40) | (TableMapIndex << 26)) + 0x0000;
+   vptr VirtualAddress = AllocateVirtualPage();
+   MapPage(VirtualAddress, PhysicalAddress);
+   
+   if(Clear) Mem_Set(VirtualAddress,  0, sizeof(palloc_map));
+   else      Mem_Set(VirtualAddress, -1, sizeof(palloc_map));
+   
+   Table->PageMaps[MapIndex] = (vptr)((u64)VirtualAddress | PAlloc_Present);
    
    return VirtualAddress;
 }
@@ -840,41 +904,32 @@ FreePhysicalPage(pptr Page)
 {
    Assert(!(Page & 0xFFF));
    
-   u32 DirIndex   = (Page >> 44) & 0x00FF;
-   u32 EntryIndex = (Page >> 40) & 0x000F;
-   u32 TableIndex = (Page >> 35) & 0x001F;
-   u32 MapIndex   = (Page >> 26) & 0x01FF;
-   u32 PageIndex  = (Page >> 12) & 0x3FFF;
+   u64 DirIndex   = (Page >> 44) & 0x00FF;
+   u64 EntryIndex = (Page >> 40) & 0x000F;
+   u64 TableIndex = (Page >> 35) & 0x001F;
+   u64 MapIndex   = (Page >> 26) & 0x01FF;
+   u64 PageIndex  = (Page >> 12) & 0x3FFF;
    
-   u32 DirMapIndex   = (Page >> 40) & 0x0FFF;
-   u32 TableMapIndex = (Page >> 26) & 0x3FFF;
+   u64 DirMapIndex   = (Page >> 40) & 0x0FFF;
+   u64 TableMapIndex = (Page >> 26) & 0x3FFF;
    
-   palloc_dir *Dir = GetOrCreatePAllocDir(DirIndex, TRUE);
-   Assert((DirMap->Dirs[DirIndex] & PAlloc_Present) || (DirMap->Lvl4[DirIndex >> 3] & (DirIndex & 7)));
+   Assert(Page != (DirIndex << 44) + 0x3000);
+   palloc_dir *Dir = GetOrCreatePAllocDir(DirIndex);
+   Assert(((u64)DirMap->Dirs[DirIndex] & PAlloc_Present) || (DirMap->Lvl4[DirIndex >> 3] & (DirIndex & 7)));
    
    palloc_dir_entry *Entry = GetPAllocDirEntry(Dir, EntryIndex);
    
+   Assert(Page != (DirMapIndex << 40) + 0x2000);
    palloc_map *TableMap = GetOrCreatePAllocTableMap(DirMapIndex, Entry, FALSE);
    Assert((GetPAllocTableMapAddr(Entry) & PAlloc_Present) || (DirMap->Lvl0[DirMapIndex >> 3] & (DirMapIndex & 7)));
    
-   palloc_table *Table = GetOrCreatePAllocTable(DirMapIndex, TableIndex, Table, TRUE);
-   Assert((Entry->Tables[TableIndex] & PAlloc_Present) || (TableMap->Lvl9[TableIndex >> 3] & (TableIndex & 7))) {
+   Assert(Page != (DirMapIndex << 40) + (TableIndex << 35) + 0x1000);
+   palloc_table *Table = GetOrCreatePAllocTable(DirMapIndex, TableIndex, Entry);
+   Assert(((u64)Entry->Tables[TableIndex] & PAlloc_Present) || (TableMap->Lvl9[TableIndex >> 3] & (TableIndex & 7)));
    
-   palloc_map *PageMap;
-   if(!(Table->PageMaps[MapIndex] & PAlloc_Present)) {
-      // Same with Dir, TableMap, and Table
-      Assert(TableMap->Lvl9[TableMapIndex >> 3] & (TableMapIndex & 7));
-      
-      u64 PageMapAddr = AllocatePhysicalPage(void);
-      Table->PageMaps[MapIndex] = PageMapAddr | PAlloc_Present;
-      PageMap = (vptr)PageMapAddr;
-      Mem_Set(PageMap, 255, sizeof(palloc_map));
-      PageMap->LvlE ^= 1;
-   } else {
-      PageMap = GetPAllocPageMap(Table, MapIndex);
-   }
-   
-   // Now we're finally able to actually free a page
+   Assert(Page != (DirMapIndex << 40) + (TableMapIndex << 26) + 0x0000);
+   palloc_map *PageMap = GetOrCreatePAllocPageMap(DirMapIndex, TableMapIndex, Table, FALSE);
+   Assert(((u64)Table->PageMaps[MapIndex] & PAlloc_Present) || (TableMap->Lvl9[TableMapIndex >> 3] & (TableMapIndex & 7)));
    
    // Go through PageMap
    u08 *Bytes = &PageMap->LvlE;
@@ -889,8 +944,8 @@ FreePhysicalPage(pptr Page)
    }
    
    // Go through TableMap
-   u08 *Bytes = &TableMap->LvlE;
-   u32 Bit = 0x4000 | TableMapIndex;
+   Bytes = &TableMap->LvlE;
+   Bit = 0x4000 | TableMapIndex;
    for(u32 I = 0; I <= 14; I++) {
       u08 *Byte = Bytes + (Bit >> 3);
       u08 Mask1 = 1 << (Bit & 7);
@@ -901,8 +956,8 @@ FreePhysicalPage(pptr Page)
    }
    
    // Go through DirMap
-   u08 *Bytes = &DirMap->LvlE;
-   u32 Bit = 0x1000 | DirMapIndex;
+   Bytes = &DirMap->LvlE;
+   Bit = 0x1000 | DirMapIndex;
    for(u32 I = 0; I <= 12; I++) {
       u08 *Byte = Bytes + (Bit >> 3);
       u08 Mask1 = 1 << (Bit & 7);
@@ -932,14 +987,14 @@ FreeMapPages(u32 Lvl, u64 Start) {
       if(*Entry & Page_Present) {
          FreeMapPages(Lvl-1, Start | (I << (Exp-9)));
          u64 Addr = *Entry & 0x000FFFFFFFFFF000;
-         FreePhysicalPage(DirMap, Addr);
+         FreePhysicalPage(Addr);
       }
    }
 }
 
 internal void
 FreeMapLvl(u32 Lvl, u64 Start, u64 End) {
-   Assert(Lvl >= 0 && Start <= End && !(Start & 0xFFF) && !(End & 0xFFF));
+   Assert(Lvl < 5 && Start <= End && !(Start & 0xFFF) && !(End & 0xFFF));
    
    if(Lvl == 0) {
       //TODO: Entry might not exist
@@ -962,6 +1017,7 @@ FreeMapLvl(u32 Lvl, u64 Start, u64 End) {
       u64 WholeEnd = End & ExpMask;
       FreeMapLvl(Lvl-1, Start, WholeStart);
       FreeMapPages(Lvl, Start);
+      u64 *Entry = (u64*)(((s64)(0xFE00000000000000 | WholeStart) >> 9) & ~0x7);
       Mem_Set(Entry, 0, (WholeEnd - WholeStart) >> (Exp-3));
       FreeMapLvl(Lvl-1, WholeEnd, End);
    }
@@ -973,11 +1029,12 @@ FreeVirtualPageRange(vptr Base, u64 PageCount, b08 ReloadCR3)
    if(PageCount == 0) return;
    
    b08 HasLvl5 = ((GetCR4() & CR4_57BitLinearAddress) != 0);
-   if(!HasLvl5) Start |= 0x01FF000000000000;
    
-   u64 Start = Base;
-   u64 End = Base + ((PageCount - 1) << 12);
+   u64 Start = (u64)Base;
+   u64 End = Start + ((PageCount - 1) << 12);
    Assert(!(Start & 0xFFF) && Start <= End);
+   
+   if(!HasLvl5) Start |= 0x01FF000000000000;
    
    FreeMapLvl(4 + HasLvl5, Start, End);
    
@@ -987,7 +1044,6 @@ FreeVirtualPageRange(vptr Base, u64 PageCount, b08 ReloadCR3)
       Assert(FALSE && "Unimplemented!");
    }
 }
-
 
 internal void
 FreePhysicalPageRange(pptr Base, u64 PageCount)

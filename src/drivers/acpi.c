@@ -261,8 +261,8 @@ InitAPIC(acpi ACPI)
     PortOut08(0x20, 0x11);
     PortOut08(0xA0, 0x11);
     
-    PortOut08(0x21, 0x20);
-    PortOut08(0xA1, 0x28);
+    PortOut08(0x21, 0xE0);
+    PortOut08(0xA1, 0xE8);
     
     PortOut08(0x21, 0x04);
     PortOut08(0xA1, 0x02);
@@ -296,10 +296,10 @@ InitAPIC(acpi ACPI)
     }
     
     APICBase = LocalAPIC;
-    SetMSR(0x1B, GetMSR(0x1B)|0x800);
+    //SetMSR(0x1B, GetMSR(0x1B)|0x800);
     
     u32 *SpuriousInterruptVector = (u32*)(LocalAPIC + 0x0F0);
-    *SpuriousInterruptVector |= 0x000001FF;
+    *SpuriousInterruptVector |= 0x00000100;
     
     return ST_Success;
 }
