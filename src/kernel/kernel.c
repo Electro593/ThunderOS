@@ -95,10 +95,10 @@ extern u08  PortIn08(u16 Address);
 extern u32  PortIn32(u16 Address);
 extern void PortOut08(u16 Address, u08 Data);
 extern void PortOut32(u16 Address, u32 Data);
-extern void SetGDTR(vptr GDT, u16 Size);
-extern void SetIDTR(idt *IDT, u16 Size);
 extern u64  GetMSR(u32 Base);
 extern void SetMSR(u32 Base, u64 Value);
+extern void SetGDTR(vptr GDT, u16 Size);
+extern void SetIDTR(idt *IDT, u16 Size);
 extern u64  GetCR0(void);
 extern u64  GetCR3(void);
 extern u64  GetCR4(void);
@@ -313,9 +313,26 @@ Kernel_Entry(rsdp *RSDP,
              efi_simple_file_system_protocol *SFSP,
              efi_memory_descriptor *MemoryMap,
              u64 MemoryMapDescriptorSize,
-             u32 MemoryMapDescriptorCount,
-             vptr PAllocPages)
+             u32 MemoryMapDescriptorCount)
 {
+   __asm__("cli");
+   
+   gdt GDT;
+   tss TSS;
+   u08 RingStacks[3][4096];
+   u08 ISTStacks[7][4096];
+   GDT_Init(&GDT, &TSS, (vptr*)RingStacks, (vptr*)ISTStacks);
+   
+   APICBase = (vptr)0xFEE00000;
+   
+   idt IDT;
+   IDT_Init(&IDT);
+   
+   __asm__("int $14");
+   
+   __asm__("sti");
+   
+   #if 0
    u32 Status;
    
    DisableInterrupts();
@@ -426,8 +443,7 @@ Kernel_Entry(rsdp *RSDP,
       Serial_Write(SerialPort, "\r\n");
    }
    
-   u64 *Ptr = (u64*)0xFFFFFFFF;
-   *Ptr = 5;
+   __asm__("int $14");
    
    Serial_Write(SerialPort, "CR0: ");
    Serial_Write(SerialPort, U64_ToStr(Buffer, CR0, 16));
@@ -436,6 +452,7 @@ Kernel_Entry(rsdp *RSDP,
    Serial_Write(SerialPort, "\r\nCR4: ");
    Serial_Write(SerialPort, U64_ToStr(Buffer, CR4, 16));
    Serial_Write(SerialPort, "\r\n");
+   #endif
    
    while(1);
    

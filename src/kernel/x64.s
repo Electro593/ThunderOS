@@ -64,18 +64,23 @@ SetGDTR:
     mov  [gdtr], si
     lgdt [gdtr]
     
-    mov ax, 0x18
-    ltr ax
+    ; mov ax, 0x18
+    ; ltr ax
     
-    mov rax, rsp
-    push qword 0x10
-    push rax
-    pushfq
-    push qword 0x08
-    lea rax, [rel .L]
-    push rax
-    iretq
+    ; mov rax, rsp
+    ; push qword 0x10
+    ; push rax
+    ; pushfq
+    ; push qword 0x08
+    ; lea rax, [rel .L]
+    ; push rax
+    ; iretq
 .L: ret
+
+[global SetTR]
+SetTR:
+    ltr di
+    ret
 
 [global SetIDTR]
 idtr dw 0
@@ -241,7 +246,7 @@ InterruptSwitch:
     
     mov eax, [APICBase + 0x100]
     mov ebx, 1
-    shl ebx, ecx
+    shl ebx, cl
     and eax, ebx
     cmp eax, 0
     je .no_eoi

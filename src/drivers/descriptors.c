@@ -38,6 +38,7 @@ typedef struct tss {
    u64 _Reserved2;
    u16 _Reserved3;
    u16 IOMapOffset;
+   u16 IOMap;
 } __attribute__((packed)) tss;
 
 typedef struct gdt_entry {
@@ -67,6 +68,10 @@ typedef struct idt {
    idt_gate_descriptor Entries[256];
 } idt;
 
+extern void SetGDTR(vptr GDT, u16 Size);
+extern void SetIDTR(idt *IDT, u16 Size);
+extern void SetTR(u16 GDTOffset);
+
 vptr InterruptHandlers[256];
 
 #endif
@@ -94,35 +99,34 @@ GDT_Init(IN gdt *GDT, IN tss *TSS, vptr *RingStacks, vptr *ISTStacks)
    *BaseP4 = (u64)TSS >> 32;
    
    TSS->_Reserved0 = 0;
-   TSS->RSP0L = (u64)RingStacks[0] & 0xFFFFFFFF;
-   TSS->RSP0H = (u64)RingStacks[0] >> 32;
-   TSS->RSP1L = (u64)RingStacks[1] & 0xFFFFFFFF;
-   TSS->RSP1H = (u64)RingStacks[1] >> 32;
-   TSS->RSP2L = (u64)RingStacks[2] & 0xFFFFFFFF;
-   TSS->RSP2H = (u64)RingStacks[2] >> 32;
+   TSS->RSP0L = (s64)RingStacks[0] & 0xFFFFFFFF;
+   TSS->RSP0H = (s64)RingStacks[0] >> 32;
+   TSS->RSP1L = (s64)RingStacks[1] & 0xFFFFFFFF;
+   TSS->RSP1H = (s64)RingStacks[1] >> 32;
+   TSS->RSP2L = (s64)RingStacks[2] & 0xFFFFFFFF;
+   TSS->RSP2H = (s64)RingStacks[2] >> 32;
    TSS->_Reserved1 = 0;
-   TSS->IST1L = ((u64)ISTStacks[0] + 0x1000) & 0xFFFFFFFF;
-   TSS->IST1H = ((u64)ISTStacks[0] + 0x1000) >> 32;
-   TSS->IST2L = ((u64)ISTStacks[1] + 0x1000) & 0xFFFFFFFF;
-   TSS->IST2H = ((u64)ISTStacks[1] + 0x1000) >> 32;
-   TSS->IST3L = ((u64)ISTStacks[2] + 0x1000) & 0xFFFFFFFF;
-   TSS->IST3H = ((u64)ISTStacks[2] + 0x1000) >> 32;
-   TSS->IST4L = ((u64)ISTStacks[3] + 0x1000) & 0xFFFFFFFF;
-   TSS->IST4H = ((u64)ISTStacks[3] + 0x1000) >> 32;
-   TSS->IST5L = ((u64)ISTStacks[4] + 0x1000) & 0xFFFFFFFF;
-   TSS->IST5H = ((u64)ISTStacks[4] + 0x1000) >> 32;
-   TSS->IST6L = ((u64)ISTStacks[5] + 0x1000) & 0xFFFFFFFF;
-   TSS->IST6H = ((u64)ISTStacks[5] + 0x1000) >> 32;
-   TSS->IST7L = ((u64)ISTStacks[6] + 0x1000) & 0xFFFFFFFF;
-   TSS->IST7H = ((u64)ISTStacks[6] + 0x1000) >> 32;
+   TSS->IST1L = ((s64)ISTStacks[0] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST1H = ((s64)ISTStacks[0] + 0x1000) >> 32;
+   TSS->IST2L = ((s64)ISTStacks[1] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST2H = ((s64)ISTStacks[1] + 0x1000) >> 32;
+   TSS->IST3L = ((s64)ISTStacks[2] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST3H = ((s64)ISTStacks[2] + 0x1000) >> 32;
+   TSS->IST4L = ((s64)ISTStacks[3] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST4H = ((s64)ISTStacks[3] + 0x1000) >> 32;
+   TSS->IST5L = ((s64)ISTStacks[4] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST5H = ((s64)ISTStacks[4] + 0x1000) >> 32;
+   TSS->IST6L = ((s64)ISTStacks[5] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST6H = ((s64)ISTStacks[5] + 0x1000) >> 32;
+   TSS->IST7L = ((s64)ISTStacks[6] + 0x1000) & 0xFFFFFFFF;
+   TSS->IST7H = ((s64)ISTStacks[6] + 0x1000) >> 32;
    TSS->_Reserved2 = 0;
    TSS->_Reserved3 = 0;
    TSS->IOMapOffset = 0x0068;
-   
-   u08 *IOMap = (u08*)TSS + TSS->IOMapOffset;
-   *(u16*)IOMap = 0xFFFF;
+   TSS->IOMap = 0xFFFF;
    
    SetGDTR(GDT, sizeof(gdt)-1);
+   SetTR(3*sizeof(gdt_entry));
 }
 
 internal void

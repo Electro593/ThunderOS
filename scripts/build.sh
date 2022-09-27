@@ -26,7 +26,7 @@ nasm -g -f elf64 src/kernel/x64.s -o build/asm.o
 
 LFLAGS="-nostdlib -Bsymbolic"
 ld $LFLAGS -shared -Tscripts/elf_${ARCH}_efi.lds build/loader.o -o build/loader.so
-ld $LFLAGS -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel
+ld $LFLAGS -r -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel
 
 if [ $ARCH = "aarch64" ]; then
     EFIARCH="pei-aarch64-little"
