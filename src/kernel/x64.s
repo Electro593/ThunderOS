@@ -241,7 +241,7 @@ InterruptSwitch:
     mov ecx, edx
     and ecx, 0x1F
     
-    mov rdx, [InterruptHandlers + rdi*8]
+    mov rdx, [InterruptHandlers + rdx*8]
     call rdx
     
     mov eax, [APICBase + 0x100]

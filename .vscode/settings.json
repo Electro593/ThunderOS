@@ -15,7 +15,8 @@
         "ammintrin.h": "c",
         "mmintrin.h": "c",
         "immintrin.h": "c",
-        "pmmintrin.h": "c"
+        "pmmintrin.h": "c",
+        "shared.h": "c"
     },
     "C_Cpp.errorSquiggles": "Disabled"
 }

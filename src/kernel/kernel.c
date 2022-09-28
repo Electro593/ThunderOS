@@ -8,7 +8,6 @@
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 #include <shared.h>
-#include <kernel/efi.h>
 
 global struct {
    u64 Flags;
@@ -73,19 +72,19 @@ typedef enum cr4_flag {
 
 #define INCLUDE_HEADER
    #include <util/mem.c>
-   #include <util/vector.c>
-   #include <util/scalar.c>
+//    #include <util/vector.c>
+//    #include <util/scalar.c>
    
    #include <kernel/efi.h>
    
    #include <drivers/serial.c>
    #include <drivers/descriptors.c>
    #include <drivers/acpi.c>
-   #include <drivers/mem.c>
-   #include <drivers/pci.c>
+//    #include <drivers/mem.c>
+//    #include <drivers/pci.c>
    
-   #include <render/font.c>
-   #include <render/terminal.c>
+//    #include <render/font.c>
+//    #include <render/terminal.c>
 #undef INCLUDE_HEADER
 
 #undef Assert
@@ -107,7 +106,7 @@ extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
 extern void InvalidateTLBEntry(vptr Address);
 
-global palloc_dir_map *DirMap;
+// global palloc_dir_map *DirMap;
 
 internal void
 KernelError(c08 *File, u32 Line, c08 *Expression)
@@ -116,18 +115,18 @@ KernelError(c08 *File, u32 Line, c08 *Expression)
 }
 
 #define INCLUDE_SOURCE
-   #include <util/vector.c>
+//    #include <util/vector.c>
    #include <util/mem.c>
-   #include <util/str.c>
+//    #include <util/str.c>
    
    #include <drivers/serial.c>
    #include <drivers/interrupts.c>
    #include <drivers/descriptors.c>
    #include <drivers/acpi.c>
-   #include <drivers/mem.c>
-   #include <drivers/pci.c>
+//    #include <drivers/mem.c>
+//    #include <drivers/pci.c>
    
-   #include <render/terminal.c>
+//    #include <render/terminal.c>
 #undef INCLUDE_SOURCE
 
 #if 0
@@ -295,16 +294,16 @@ KernelError(c08 *File,
 }
 #endif
 
-internal void
-InitGOP(efi_graphics_output_protocol *GOP)
-{
-   u64 SizeOfGOPInfo;
-   efi_graphics_output_mode_information *Info;
-   efi_status Status = GOP->QueryMode(GOP, GOP->Mode->Mode, &SizeOfGOPInfo, &Info);
-   Assert(Status == EFI_Status_Success);
-   // Context.FramebufferSize = GOP->Mode->FrameBufferSize;
-   // Context.Framebuffer = (u32*)GOP->Mode->FrameBufferBase;
-}
+// internal void
+// InitGOP(efi_graphics_output_protocol *GOP)
+// {
+//    u64 SizeOfGOPInfo;
+//    efi_graphics_output_mode_information *Info;
+//    efi_status Status = GOP->QueryMode(GOP, GOP->Mode->Mode, &SizeOfGOPInfo, &Info);
+//    Assert(Status == EFI_Status_Success);
+//    // Context.FramebufferSize = GOP->Mode->FrameBufferSize;
+//    // Context.Framebuffer = (u32*)GOP->Mode->FrameBufferBase;
+// }
 
 external u32
 Kernel_Entry(rsdp *RSDP,
@@ -324,6 +323,8 @@ Kernel_Entry(rsdp *RSDP,
    GDT_Init(&GDT, &TSS, (vptr*)RingStacks, (vptr*)ISTStacks);
    
    APICBase = (vptr)0xFEE00000;
+   u32 *SpuriousInterruptVector = (u32*)(APICBase + 0x0F0);
+   *SpuriousInterruptVector |= 0x00000100;
    
    idt IDT;
    IDT_Init(&IDT);
@@ -454,7 +455,7 @@ Kernel_Entry(rsdp *RSDP,
    Serial_Write(SerialPort, "\r\n");
    #endif
    
-   while(1);
+//    while(1);
    
    return EFI_Status_Success;
 }

@@ -219,7 +219,12 @@ EFI_Entry(u64 LoadBase,
    elf64_section_header *StringTableHeader = (vptr)(SectionHeaderBase + ELFHeader->StringTableIndex*ELFHeader->SectionHeaderSize);
    c08 *StringTable = (vptr)(FileData + StringTableHeader->Offset);
    
-   u32 TextNum = 0;
+   vptr *SectionBases;
+   Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, sizeof(u08*) * ELFHeader->SectionHeaderCount, (vptr*)&SectionBases);
+   SASSERT(EFI_Status_Success, u"ERROR: Could not allocate memory for section bases\r\n");
+   
+   u64 BaseAddress = 0x1000;
+   
    u64 PrevTextAlign = 1;
    u64 PrevDataAlign = 1;
    u64 PrevBSSAlign = 1;
@@ -235,7 +240,6 @@ EFI_Entry(u64 LoadBase,
          TextSize = (TextSize + PrevTextAlign-1) & ~(PrevTextAlign-1);
          TextSize += Header->Size;
          PrevTextAlign = Header->Align;
-         TextNum++;
       } else if(_strcmp(Name, ".rodata") == 0) {
          DataSize = (DataSize + PrevDataAlign-1) & ~(PrevDataAlign-1);
          DataSize += Header->Size;
@@ -250,38 +254,50 @@ EFI_Entry(u64 LoadBase,
          PrevBSSAlign = Header->Align;
       }
    }
-   
    TextSize = (TextSize + PrevDataAlign-1) & ~(PrevDataAlign-1);
    DataSize = (DataSize + PrevBSSAlign-1) & ~(PrevBSSAlign-1);
    u64 PageCount = (TextSize + DataSize + BSSSize + 0x0FFF) >> 12;
-   u64 BaseAddress = 0x1000;
    Status = BootServices->AllocatePages(EFI_AllocateType_Address, EFI_MemoryType_LoaderData, PageCount, (vptr*)&BaseAddress);
    SASSERT(EFI_Status_Success, u"ERROR: Could not allocate pages for kernel image\r\n");
    
-   u64 TextCursor = 0;
-   u64 DataCursor = 0;
+   u64 TextOffset = 0;
+   u64 DataOffset = 0;
+   u64 BSSOffset = 0;
+   PrevTextAlign = 1;
+   PrevDataAlign = 1;
+   PrevBSSAlign = 1;
    for(u32 I = 0; I < ELFHeader->SectionHeaderCount; I++) {
       elf64_section_header *Header = (vptr)(SectionHeaderBase + I*ELFHeader->SectionHeaderSize);
-      
       c08 *Name = StringTable + Header->Name;
       u08 *Section = FileData + Header->Offset;
       
       if(_strcmp(Name, ".text") == 0) {
-         u08 *Src08 = Section;
-         u08 *Dst08 = (u08*)BaseAddress + TextCursor;
-         TextCursor += Header->Size;
-         for(u64 J = 0; J < Header->Size; J++)
-            *Dst08++ = *Src08++;
-      } else if(_strcmp(Name, ".data") == 0) {
-         u08 *Src08 = Section;
-         u08 *Dst08 = (u08*)BaseAddress + TextSize + DataCursor;
-         DataCursor += Header->Size;
-         for(u64 J = 0; J < Header->Size; J++)
-            *Dst08++ = *Src08++;
+         TextOffset = (TextOffset + PrevTextAlign-1) & ~(PrevTextAlign-1);
+         SectionBases[I] = (vptr)(BaseAddress + TextOffset);
+         TextOffset += Header->Size;
+         PrevTextAlign = Header->Align;
       } else if(_strcmp(Name, ".rodata") == 0) {
+         DataOffset = (DataOffset + PrevDataAlign-1) & ~(PrevDataAlign-1);
+         SectionBases[I] = (vptr)(BaseAddress + TextSize + DataOffset);
+         DataOffset += Header->Size;
+         PrevDataAlign = Header->Align;
+      } else if(_strcmp(Name, ".data") == 0) {
+         DataOffset = (DataOffset + PrevDataAlign-1) & ~(PrevDataAlign-1);
+         SectionBases[I] = (vptr)(BaseAddress + TextSize + DataOffset);
+         DataOffset += Header->Size;
+         PrevDataAlign = Header->Align;
+      } else if(_strcmp(Name, ".bss") == 0) {
+         BSSOffset = (BSSOffset + PrevBSSAlign-1) & ~(PrevBSSAlign-1);
+         SectionBases[I] = (vptr)(BaseAddress + TextSize + DataSize + BSSOffset);
+         BSSOffset += Header->Size;
+         PrevBSSAlign = Header->Align;
+      } else {
+         SectionBases[I] = 0;
+      }
+      
+      if(Header->Type == ELF_SectionHeaderType_ProgramBits) {
          u08 *Src08 = Section;
-         u08 *Dst08 = (u08*)BaseAddress + TextSize + DataCursor;
-         DataCursor += Header->Size;
+         u08 *Dst08 = SectionBases[I];
          for(u64 J = 0; J < Header->Size; J++)
             *Dst08++ = *Src08++;
       }
@@ -296,30 +312,37 @@ EFI_Entry(u64 LoadBase,
       if(_strcmp(Name, ".rela.text") == 0) {
          elf64_section_header *SymbolTable = (vptr)(SectionHeaderBase + Header->Link*ELFHeader->SectionHeaderSize);
          u08 *SymbolsBase = FileData + SymbolTable->Offset;
-         ASSERT(TextNum == 1, u"Multiple .text sections currently not supported!\r\n");
          
          for(u64 J = 0; J < Header->Size; J += Header->EntrySize) {
             elf64_relocation_addend *Entry = (vptr)(Section + J);
             elf64_symbol *Symbol = (vptr)(SymbolsBase + (Entry->Info >> 32)*SymbolTable->EntrySize);
             u08 *Dest = (vptr)(BaseAddress + Entry->Offset);
+            u64 ReferenceBase = (u64)SectionBases[Symbol->SectionIndex];
+            u64 ReferencerBase = (u64)SectionBases[Header->Info];
             
             switch(ELFHeader->Machine) {
                case ELF_MachineType_AMD64: {
                   switch(Entry->Info & 0xFFFFFFFF) {
                      case ELF_RelocationType_AMD64_64:
-                        *(u64*)Dest = Symbol->Value + Entry->Addend;
+                        *(u64*)Dest = ReferenceBase + Symbol->Value + Entry->Addend;
                         break;
                      
                      case ELF_RelocationType_AMD64_PC32:
-                        LocBeingReferenced - ProgCntr
-                        *(u32*)Dest = Symbol->Value + Entry->Addend - Dest;
+                        *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
                         break;
                      
                      case ELF_RelocationType_AMD64_PLT32:
-                        // *(u32*)Dest = a + Entry->Addend - Entry->Offset;
+                        //TODO//HACK: Well, not sure where the .plt is, so... I guess this works? Maybe?
+                        *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
+                        break;
+                     
+                     case ELF_RelocationType_AMD64_32S:
+                        *(s32*)Dest = (s32)(s64)(ReferenceBase + Symbol->Value + Entry->Addend);
                         break;
                      
                      case ELF_RelocationType_AMD64_GOTPCRelX:
+                        //TODO//HACK: Well, not sure where the .got is, so... I guess this works? Maybe?
+                        *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
                         break;
                      
                      case ELF_RelocationType_AMD64_None:
@@ -330,7 +353,6 @@ EFI_Entry(u64 LoadBase,
                      case ELF_RelocationType_AMD64_Rel:
                      case ELF_RelocationType_AMD64_GOTPCRel:
                      case ELF_RelocationType_AMD64_32:
-                     case ELF_RelocationType_AMD64_32S:
                      case ELF_RelocationType_AMD64_16:
                      case ELF_RelocationType_AMD64_PC16:
                      case ELF_RelocationType_AMD64_8:
