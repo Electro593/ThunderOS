@@ -56,6 +56,23 @@ PortOut32:
     out dx,  eax
     ret
 
+[global SetSegments]
+SetSegments:
+    mov rax, rsp
+    push rsi
+    push rax
+    pushfq
+    push rdi
+    lea rax, [rel .L]
+    push rax
+    iretq
+.L: ret
+
+[global SetSS]
+SetSS:
+    mov ss, di
+    ret
+
 [global SetGDTR]
 gdtr dw 0
      dq 0
@@ -63,9 +80,6 @@ SetGDTR:
     mov  [gdtr+2], rdi
     mov  [gdtr], si
     lgdt [gdtr]
-    
-    ; mov ax, 0x18
-    ; ltr ax
     
     ; mov rax, rsp
     ; push qword 0x10
@@ -143,82 +157,16 @@ InvalidateTLBEntry:
     invlpg [rdi]
     ret
 
-; TODO: Make this just a number
-[global GetInterruptStep]
-GetInterruptStep:
-    jmp .B
-.A: push byte 0
-    jmp .B
-.B: mov rax, .B
-    sub rax, .A
-    ret
-
-; IMPORTANT: If the number of interrupts gets too high, the jmp
-; instruction will get larger. In that case, GetInterruptStep WILL NOT WORK!
-[global InterruptSwitch]
-InterruptSwitch:
-    push byte 0
-    jmp .End
-    push byte 1
-    jmp .End
-    push byte 2
-    jmp .End
-    push byte 3
-    jmp .End
-    push byte 4
-    jmp .End
-    push byte 5
-    jmp .End
-    push byte 6
-    jmp .End
-    push byte 7
-    jmp .End
-    push byte 8
-    jmp .End
-    push byte 9
-    jmp .End
-    push byte 10
-    jmp .End
-    push byte 11
-    jmp .End
-    push byte 12
-    jmp .End
-    push byte 13
-    jmp .End
-    push byte 14
-    jmp .End
-    push byte 15
-    jmp .End
-    push byte 16
-    jmp .End
-    push byte 17
-    jmp .End
-    push byte 18
-    jmp .End
-    push byte 19
-    jmp .End
-    push byte 20
-    jmp .End
-    push byte 21
-    jmp .End
-    push byte 22
-    jmp .End
-    push byte 23
-    jmp .End
-    push byte 24
-    jmp .End
-    push byte 25
-    jmp .End
-    push byte 26
-    jmp .End
-    push byte 27
-    jmp .End
-    push byte 28
-    jmp .End
-    push byte 29
-    jmp .End
-    push byte 30
-.End:
+%assign i 0
+%rep 256
+    %define label InterruptSwitch %+ i
+    [global label]
+    label %+ :
+    push word i
+    jmp InterruptSwitchEnd
+    %assign i i+1
+%endrep
+InterruptSwitchEnd:
     pushfq
     push r15
     push r14
@@ -271,6 +219,6 @@ InterruptSwitch:
     pop r15
     popfq
     
-    add rsp, 1
+    add rsp, 2
     
     iretq

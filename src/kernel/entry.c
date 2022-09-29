@@ -32,40 +32,40 @@ asm (
 "        .text                     \n"
 );
 
-asm (
-"        .globl setjmp         \n"
-"                              \n"
-"setjmp: pop  %rsi             \n"
-"        movq %rbx, 0x00(%rdi) \n"
-"        movq %rsp, 0x08(%rdi) \n"
-"        push %rsi             \n"
-"        movq %rbp, 0x10(%rdi) \n"
-"        movq %r12, 0x18(%rdi) \n"
-"        movq %r13, 0x20(%rdi) \n"
-"        movq %r14, 0x28(%rdi) \n"
-"        movq %r15, 0x30(%rdi) \n"
-"        movq %rsi, 0x38(%rdi) \n"
-"        xor  %rax, %rax       \n"
-"        ret                   \n"
-);
+// asm (
+// "        .globl setjmp         \n"
+// "                              \n"
+// "setjmp: pop  %rsi             \n"
+// "        movq %rbx, 0x00(%rdi) \n"
+// "        movq %rsp, 0x08(%rdi) \n"
+// "        push %rsi             \n"
+// "        movq %rbp, 0x10(%rdi) \n"
+// "        movq %r12, 0x18(%rdi) \n"
+// "        movq %r13, 0x20(%rdi) \n"
+// "        movq %r14, 0x28(%rdi) \n"
+// "        movq %r15, 0x30(%rdi) \n"
+// "        movq %rsi, 0x38(%rdi) \n"
+// "        xor  %rax, %rax       \n"
+// "        ret                   \n"
+// );
 
-asm (
-"         .globl longjmp        \n"
-"                               \n"
-"longjmp: movl %esi, %eax       \n"
-"         movq 0x00(%rdi), %rbx \n"
-"         movq 0x08(%rdi), %rsp \n"
-"         movq 0x10(%rdi), %rbp \n"
-"         movq 0x18(%rdi), %r12 \n"
-"         movq 0x20(%rdi), %r13 \n"
-"         movq 0x28(%rdi), %r14 \n"
-"         movq 0x30(%rdi), %r15 \n"
-"         xor %rdx, %rdx        \n"
-"         mov $1, %rcx          \n"
-"         cmp %rax, %rdx        \n"
-"         cmove %rcx, %rax      \n"
-"         jmp *0x38(%rdi)       \n"
-);
+// asm (
+// "         .globl longjmp        \n"
+// "                               \n"
+// "longjmp: movl %esi, %eax       \n"
+// "         movq 0x00(%rdi), %rbx \n"
+// "         movq 0x08(%rdi), %rsp \n"
+// "         movq 0x10(%rdi), %rbp \n"
+// "         movq 0x18(%rdi), %r12 \n"
+// "         movq 0x20(%rdi), %r13 \n"
+// "         movq 0x28(%rdi), %r14 \n"
+// "         movq 0x30(%rdi), %r15 \n"
+// "         xor %rdx, %rdx        \n"
+// "         mov $1, %rcx          \n"
+// "         cmp %rax, %rdx        \n"
+// "         cmove %rcx, %rax      \n"
+// "         jmp *0x38(%rdi)       \n"
+// );
 
 #define INCLUDE_HEADER
    #include <kernel/efi.h>
@@ -219,189 +219,283 @@ EFI_Entry(u64 LoadBase,
    elf64_section_header *StringTableHeader = (vptr)(SectionHeaderBase + ELFHeader->StringTableIndex*ELFHeader->SectionHeaderSize);
    c08 *StringTable = (vptr)(FileData + StringTableHeader->Offset);
    
-   vptr *SectionBases;
-   Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, sizeof(u08*) * ELFHeader->SectionHeaderCount, (vptr*)&SectionBases);
-   SASSERT(EFI_Status_Success, u"ERROR: Could not allocate memory for section bases\r\n");
+   u64 KernelEntryAddress;
    
-   u64 BaseAddress = 0x1000;
-   
-   u64 PrevTextAlign = 1;
-   u64 PrevDataAlign = 1;
-   u64 PrevBSSAlign = 1;
-   u64 TextSize = 0;
-   u64 DataSize = 0;
-   u64 BSSSize = 0;
-   for(u32 I = 0; I < ELFHeader->SectionHeaderCount; I++) {
-      elf64_section_header *Header = (vptr)(SectionHeaderBase + I*ELFHeader->SectionHeaderSize);
-      
-      c08 *Name = StringTable + Header->Name;
-      
-      if(_strcmp(Name, ".text") == 0) {
-         TextSize = (TextSize + PrevTextAlign-1) & ~(PrevTextAlign-1);
-         TextSize += Header->Size;
-         PrevTextAlign = Header->Align;
-      } else if(_strcmp(Name, ".rodata") == 0) {
-         DataSize = (DataSize + PrevDataAlign-1) & ~(PrevDataAlign-1);
-         DataSize += Header->Size;
-         PrevDataAlign = Header->Align;
-      } else if(_strcmp(Name, ".data") == 0) {
-         DataSize = (DataSize + PrevDataAlign-1) & ~(PrevDataAlign-1);
-         DataSize += Header->Size;
-         PrevDataAlign = Header->Align;
-      } else if(_strcmp(Name, ".bss") == 0) {
-         BSSSize = (BSSSize + PrevBSSAlign-1) & ~(PrevBSSAlign-1);
-         BSSSize += Header->Size;
-         PrevBSSAlign = Header->Align;
-      }
-   }
-   TextSize = (TextSize + PrevDataAlign-1) & ~(PrevDataAlign-1);
-   DataSize = (DataSize + PrevBSSAlign-1) & ~(PrevBSSAlign-1);
-   u64 PageCount = (TextSize + DataSize + BSSSize + 0x0FFF) >> 12;
-   Status = BootServices->AllocatePages(EFI_AllocateType_Address, EFI_MemoryType_LoaderData, PageCount, (vptr*)&BaseAddress);
-   SASSERT(EFI_Status_Success, u"ERROR: Could not allocate pages for kernel image\r\n");
-   
-   u64 TextOffset = 0;
-   u64 DataOffset = 0;
-   u64 BSSOffset = 0;
-   PrevTextAlign = 1;
-   PrevDataAlign = 1;
-   PrevBSSAlign = 1;
-   for(u32 I = 0; I < ELFHeader->SectionHeaderCount; I++) {
-      elf64_section_header *Header = (vptr)(SectionHeaderBase + I*ELFHeader->SectionHeaderSize);
-      c08 *Name = StringTable + Header->Name;
-      u08 *Section = FileData + Header->Offset;
-      
-      if(_strcmp(Name, ".text") == 0) {
-         TextOffset = (TextOffset + PrevTextAlign-1) & ~(PrevTextAlign-1);
-         SectionBases[I] = (vptr)(BaseAddress + TextOffset);
-         TextOffset += Header->Size;
-         PrevTextAlign = Header->Align;
-      } else if(_strcmp(Name, ".rodata") == 0) {
-         DataOffset = (DataOffset + PrevDataAlign-1) & ~(PrevDataAlign-1);
-         SectionBases[I] = (vptr)(BaseAddress + TextSize + DataOffset);
-         DataOffset += Header->Size;
-         PrevDataAlign = Header->Align;
-      } else if(_strcmp(Name, ".data") == 0) {
-         DataOffset = (DataOffset + PrevDataAlign-1) & ~(PrevDataAlign-1);
-         SectionBases[I] = (vptr)(BaseAddress + TextSize + DataOffset);
-         DataOffset += Header->Size;
-         PrevDataAlign = Header->Align;
-      } else if(_strcmp(Name, ".bss") == 0) {
-         BSSOffset = (BSSOffset + PrevBSSAlign-1) & ~(PrevBSSAlign-1);
-         SectionBases[I] = (vptr)(BaseAddress + TextSize + DataSize + BSSOffset);
-         BSSOffset += Header->Size;
-         PrevBSSAlign = Header->Align;
-      } else {
-         SectionBases[I] = 0;
-      }
-      
-      if(Header->Type == ELF_SectionHeaderType_ProgramBits) {
-         u08 *Src08 = Section;
-         u08 *Dst08 = SectionBases[I];
-         for(u64 J = 0; J < Header->Size; J++)
-            *Dst08++ = *Src08++;
-      }
-   }
-   
-   for(u32 I = 0; I < ELFHeader->SectionHeaderCount; I++) {
-      elf64_section_header *Header = (vptr)(SectionHeaderBase + I*ELFHeader->SectionHeaderSize);
-      
-      c08 *Name = StringTable + Header->Name;
-      u08 *Section = FileData + Header->Offset;
-      
-      if(_strcmp(Name, ".rela.text") == 0) {
-         elf64_section_header *SymbolTable = (vptr)(SectionHeaderBase + Header->Link*ELFHeader->SectionHeaderSize);
-         u08 *SymbolsBase = FileData + SymbolTable->Offset;
+   switch(ELFHeader->Type) {
+      case ELF_HeaderType_Rel: {
+         vptr *SectionBases;
+         Status = BootServices->AllocatePool(EFI_MemoryType_LoaderData, sizeof(u08*) * ELFHeader->SectionHeaderCount, (vptr*)&SectionBases);
+         SASSERT(EFI_Status_Success, u"ERROR: Could not allocate memory for section bases\r\n");
          
-         for(u64 J = 0; J < Header->Size; J += Header->EntrySize) {
-            elf64_relocation_addend *Entry = (vptr)(Section + J);
-            elf64_symbol *Symbol = (vptr)(SymbolsBase + (Entry->Info >> 32)*SymbolTable->EntrySize);
-            u08 *Dest = (vptr)(BaseAddress + Entry->Offset);
-            u64 ReferenceBase = (u64)SectionBases[Symbol->SectionIndex];
-            u64 ReferencerBase = (u64)SectionBases[Header->Info];
+         u64 BaseAddress = 0x1000;
+         
+         u64 PrevTextAlign = 1;
+         u64 PrevRODataAlign = 1;
+         u64 PrevDataAlign = 1;
+         u64 PrevBSSAlign = 1;
+         u64 TextSize = 0;
+         u64 RODataSize = 0;
+         u64 DataSize = 0;
+         u64 BSSSize = 0;
+         for(u32 I = 0; I < ELFHeader->SectionHeaderCount; I++) {
+            elf64_section_header *Header = (vptr)(SectionHeaderBase + I*ELFHeader->SectionHeaderSize);
             
-            switch(ELFHeader->Machine) {
-               case ELF_MachineType_AMD64: {
-                  switch(Entry->Info & 0xFFFFFFFF) {
-                     case ELF_RelocationType_AMD64_64:
-                        *(u64*)Dest = ReferenceBase + Symbol->Value + Entry->Addend;
-                        break;
-                     
-                     case ELF_RelocationType_AMD64_PC32:
-                        *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
-                        break;
-                     
-                     case ELF_RelocationType_AMD64_PLT32:
-                        //TODO//HACK: Well, not sure where the .plt is, so... I guess this works? Maybe?
-                        *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
-                        break;
-                     
-                     case ELF_RelocationType_AMD64_32S:
-                        *(s32*)Dest = (s32)(s64)(ReferenceBase + Symbol->Value + Entry->Addend);
-                        break;
-                     
-                     case ELF_RelocationType_AMD64_GOTPCRelX:
-                        //TODO//HACK: Well, not sure where the .got is, so... I guess this works? Maybe?
-                        *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
-                        break;
-                     
-                     case ELF_RelocationType_AMD64_None:
-                     case ELF_RelocationType_AMD64_GOT32:
-                     case ELF_RelocationType_AMD64_Copy:
-                     case ELF_RelocationType_AMD64_Global:
-                     case ELF_RelocationType_AMD64_Jump:
-                     case ELF_RelocationType_AMD64_Rel:
-                     case ELF_RelocationType_AMD64_GOTPCRel:
-                     case ELF_RelocationType_AMD64_32:
-                     case ELF_RelocationType_AMD64_16:
-                     case ELF_RelocationType_AMD64_PC16:
-                     case ELF_RelocationType_AMD64_8:
-                     case ELF_RelocationType_AMD64_PC8:
-                     case ELF_RelocationType_AMD64_DPTMod64:
-                     case ELF_RelocationType_AMD64_DTPOff64:
-                     case ELF_RelocationType_AMD64_TPOff64:
-                     case ELF_RelocationType_AMD64_TLSGD:
-                     case ELF_RelocationType_AMD64_TLSLD:
-                     case ELF_RelocationType_AMD64_DTPOff32:
-                     case ELF_RelocationType_AMD64_GOTTPOff:
-                     case ELF_RelocationType_AMD64_TPOff32:
-                     default:
-                        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"Unsupported AMD64 relocation type!\r\n    Type: ");
-                        U64_ToStr(Buffer, Entry->Info & 0xFFFFFFFF, 16);
-                        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
-                        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n    Index: ");
-                        U64_ToStr(Buffer, (J & 0xFFFFFFFF) / Header->EntrySize, 10);
-                        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
-                        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n    Section: ");
-                        U64_ToStr(Buffer, Header->Offset + J, 16);
-                        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
-                        SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
-                        ASSERT(FALSE, u"");
-                        break;
-                  }
-               } break;
-               
-               default:
-                  ASSERT(FALSE, u"Unsupported ELF machine type!\r\n");
-                  break;
+            c08 *Name = StringTable + Header->Name;
+            
+            if(_strcmp(Name, ".text") == 0) {
+               TextSize = (TextSize + PrevTextAlign-1) & ~(PrevTextAlign-1);
+               TextSize += Header->Size;
+               PrevTextAlign = Header->Align;
+            } else if(_strcmp(Name, ".rodata") == 0) {
+               RODataSize = (RODataSize + PrevRODataAlign-1) & ~(PrevRODataAlign-1);
+               RODataSize += Header->Size;
+               PrevRODataAlign = Header->Align;
+            } else if(_strcmp(Name, ".data") == 0) {
+               DataSize = (DataSize + PrevDataAlign-1) & ~(PrevDataAlign-1);
+               DataSize += Header->Size;
+               PrevDataAlign = Header->Align;
+            } else if(_strcmp(Name, ".bss") == 0) {
+               BSSSize = (BSSSize + PrevBSSAlign-1) & ~(PrevBSSAlign-1);
+               BSSSize += Header->Size;
+               PrevBSSAlign = Header->Align;
             }
          }
-      }
+         TextSize   = (TextSize   + PrevRODataAlign - 1) & ~(PrevRODataAlign - 1);
+         RODataSize = (RODataSize + PrevDataAlign   - 1) & ~(PrevDataAlign   - 1);
+         DataSize   = (DataSize   + PrevBSSAlign    - 1) & ~(PrevBSSAlign    - 1);
+         
+         U64_ToStr(Buffer, BaseAddress, 16);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"Kernel .text is at ");
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
+         
+         U64_ToStr(Buffer, BaseAddress + TextSize, 16);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"Kernel .rodata is at ");
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
+         
+         U64_ToStr(Buffer, BaseAddress + TextSize + RODataSize, 16);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"Kernel .data is at ");
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
+         
+         U64_ToStr(Buffer, BaseAddress + TextSize + RODataSize + DataSize, 16);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"Kernel .bss is at ");
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
+         
+         u64 PageCount = (TextSize + RODataSize + DataSize + BSSSize + 0x0FFF) >> 12;
+         Status = BootServices->AllocatePages(EFI_AllocateType_Address, EFI_MemoryType_LoaderData, PageCount, (vptr*)&BaseAddress);
+         SASSERT(EFI_Status_Success, u"ERROR: Could not allocate pages for kernel image\r\n");
+         
+         u64 TextOffset = 0;
+         u64 RODataOffset = 0;
+         u64 DataOffset = 0;
+         u64 BSSOffset = 0;
+         PrevTextAlign = 1;
+         PrevRODataAlign = 1;
+         PrevDataAlign = 1;
+         PrevBSSAlign = 1;
+         for(u32 I = 0; I < ELFHeader->SectionHeaderCount; I++) {
+            elf64_section_header *Header = (vptr)(SectionHeaderBase + I*ELFHeader->SectionHeaderSize);
+            c08 *Name = StringTable + Header->Name;
+            u08 *Section = FileData + Header->Offset;
+            b08 ShouldCopy = FALSE;
+            
+            if(_strcmp(Name, ".text") == 0) {
+               TextOffset = (TextOffset + PrevTextAlign-1) & ~(PrevTextAlign-1);
+               SectionBases[I] = (vptr)(BaseAddress + TextOffset);
+               TextOffset += Header->Size;
+               PrevTextAlign = Header->Align;
+               ShouldCopy = TRUE;
+            } else if(_strcmp(Name, ".rodata") == 0) {
+               RODataOffset = (RODataOffset + PrevRODataAlign-1) & ~(PrevRODataAlign-1);
+               SectionBases[I] = (vptr)(BaseAddress + TextSize + RODataOffset);
+               RODataOffset += Header->Size;
+               PrevRODataAlign = Header->Align;
+               ShouldCopy = TRUE;
+            } else if(_strcmp(Name, ".data") == 0) {
+               DataOffset = (DataOffset + PrevDataAlign-1) & ~(PrevDataAlign-1);
+               SectionBases[I] = (vptr)(BaseAddress + TextSize + RODataSize + DataOffset);
+               DataOffset += Header->Size;
+               PrevDataAlign = Header->Align;
+               ShouldCopy = TRUE;
+            } else if(_strcmp(Name, ".bss") == 0) {
+               BSSOffset = (BSSOffset + PrevBSSAlign-1) & ~(PrevBSSAlign-1);
+               SectionBases[I] = (vptr)(BaseAddress + TextSize + RODataSize + DataSize + BSSOffset);
+               BSSOffset += Header->Size;
+               PrevBSSAlign = Header->Align;
+            } else {
+               SectionBases[I] = 0;
+            }
+            
+            if(ShouldCopy) {
+               u08 *Src08 = Section;
+               u08 *Dst08 = SectionBases[I];
+               for(u64 J = 0; J < Header->Size; J++)
+                  *Dst08++ = *Src08++;
+            }
+         }
+         
+         for(u32 I = 0; I < ELFHeader->SectionHeaderCount; I++) {
+            elf64_section_header *Header = (vptr)(SectionHeaderBase + I*ELFHeader->SectionHeaderSize);
+            
+            c08 *Name = StringTable + Header->Name;
+            u08 *Section = FileData + Header->Offset;
+            
+            if(_strcmp(Name, ".rela.text") == 0) {
+               elf64_section_header *SymbolTable = (vptr)(SectionHeaderBase + Header->Link*ELFHeader->SectionHeaderSize);
+               u08 *SymbolsBase = FileData + SymbolTable->Offset;
+               
+               for(u64 J = 0; J < Header->Size; J += Header->EntrySize) {
+                  elf64_relocation_addend *Entry = (vptr)(Section + J);
+                  elf64_symbol *Symbol = (vptr)(SymbolsBase + (Entry->Info >> 32)*SymbolTable->EntrySize);
+                  u08 *Dest = (vptr)(BaseAddress + Entry->Offset);
+                  u64 ReferenceBase = (u64)SectionBases[Symbol->SectionIndex];
+                  u64 ReferencerBase = (u64)SectionBases[Header->Info];
+                  
+                  switch(ELFHeader->Machine) {
+                     case ELF_MachineType_AMD64: {
+                        switch(Entry->Info & 0xFFFFFFFF) {
+                           case ELF_RelocationType_AMD64_64:
+                              *(u64*)Dest = ReferenceBase + Symbol->Value + Entry->Addend;
+                              break;
+                           
+                           case ELF_RelocationType_AMD64_PC32:
+                              *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
+                              break;
+                           
+                           case ELF_RelocationType_AMD64_PLT32:
+                              //TODO//HACK: Well, not sure where the .plt is, so... I guess this works? Maybe?
+                              *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
+                              break;
+                           
+                           case ELF_RelocationType_AMD64_32S:
+                              *(s32*)Dest = (s32)(s64)(ReferenceBase + Symbol->Value + Entry->Addend);
+                              break;
+                           
+                           case ELF_RelocationType_AMD64_GOTPCRelX:
+                              //TODO//HACK: Well, not sure where the .got is, so... I guess this works? Maybe?
+                              *(u32*)Dest = ReferenceBase + Symbol->Value + Entry->Addend - Entry->Offset - ReferencerBase;
+                              break;
+                           
+                           case ELF_RelocationType_AMD64_None:
+                           case ELF_RelocationType_AMD64_GOT32:
+                           case ELF_RelocationType_AMD64_Copy:
+                           case ELF_RelocationType_AMD64_Global:
+                           case ELF_RelocationType_AMD64_Jump:
+                           case ELF_RelocationType_AMD64_Rel:
+                           case ELF_RelocationType_AMD64_GOTPCRel:
+                           case ELF_RelocationType_AMD64_32:
+                           case ELF_RelocationType_AMD64_16:
+                           case ELF_RelocationType_AMD64_PC16:
+                           case ELF_RelocationType_AMD64_8:
+                           case ELF_RelocationType_AMD64_PC8:
+                           case ELF_RelocationType_AMD64_DPTMod64:
+                           case ELF_RelocationType_AMD64_DTPOff64:
+                           case ELF_RelocationType_AMD64_TPOff64:
+                           case ELF_RelocationType_AMD64_TLSGD:
+                           case ELF_RelocationType_AMD64_TLSLD:
+                           case ELF_RelocationType_AMD64_DTPOff32:
+                           case ELF_RelocationType_AMD64_GOTTPOff:
+                           case ELF_RelocationType_AMD64_TPOff32:
+                           default:
+                              SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"Unsupported AMD64 relocation type!\r\n    Type: ");
+                              U64_ToStr(Buffer, Entry->Info & 0xFFFFFFFF, 16);
+                              SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+                              SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n    Index: ");
+                              U64_ToStr(Buffer, (J & 0xFFFFFFFF) / Header->EntrySize, 10);
+                              SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+                              SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n    Section: ");
+                              U64_ToStr(Buffer, Header->Offset + J, 16);
+                              SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+                              SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
+                              ASSERT(FALSE, u"");
+                              break;
+                        }
+                     } break;
+                     
+                     default:
+                        ASSERT(FALSE, u"Unsupported ELF machine type!\r\n");
+                        break;
+                  }
+               }
+            }
+         }
+         
+         KernelEntryAddress = BaseAddress + ELFHeader->Entry;
+         
+         Status = BootServices->FreePool(SectionBases);
+         SASSERT(EFI_Status_Success, u"ERROR: Could not free section bases\r\n");
+      } break;
+      
+      case ELF_HeaderType_Exec: {
+         ASSERT(ELFHeader->ProgramHeaderCount > 0, u"Executable ELF must have at least one program header!\r\n");
+         
+         elf64_program_header *Header = (vptr)ProgramHeaderBase;
+         u64 BaseAddress = Header->VirtualAddress;
+         u64 MaxAddress = Header->VirtualAddress + Header->SizeInMemory;
+         
+         for(u32 I = 1; I < ELFHeader->ProgramHeaderCount; I++) {
+            Header = (vptr)(ProgramHeaderBase + I*ELFHeader->ProgramHeaderSize);
+            
+            switch(Header->Type) {
+               case ELF_ProgramHeaderType_Load: {
+                  if(BaseAddress > Header->VirtualAddress)
+                     BaseAddress = Header->VirtualAddress;
+                  if(MaxAddress < Header->VirtualAddress + Header->SizeInMemory)
+                     MaxAddress = Header->VirtualAddress + Header->SizeInMemory;
+               } break;
+               
+               case ELF_ProgramHeaderType_GNUStack:
+                  break;
+               
+               default:
+                  U64_ToStr(Buffer, Header->Type, 16);
+                  SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"Unsupported program header type! (");
+                  SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+                  SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u")\r\n");
+                  ASSERT(FALSE, u"");
+            }
+            
+         }
+         
+         U64_ToStr(Buffer, BaseAddress, 16);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"NOTE: Base address is at ");
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
+         
+         U64_ToStr(Buffer, MaxAddress, 16);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"NOTE: Max address is at ");
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+         SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
+         
+         u64 PageCount = (MaxAddress - BaseAddress + 0x0FFF) >> 12;
+         Status = BootServices->AllocatePages(EFI_AllocateType_Address, EFI_MemoryType_LoaderData, PageCount, (vptr*)&BaseAddress);
+         SASSERT(EFI_Status_Success, u"ERROR: Could not allocate pages for kernel image\r\n");
+         
+         for(u32 I = 0; I < ELFHeader->ProgramHeaderCount; I++) {
+            Header = (vptr)(ProgramHeaderBase + I*ELFHeader->ProgramHeaderSize);
+            
+            u08 *Dst08 = (u08*)Header->VirtualAddress;
+            u08 *Src08 = (u08*)(FileData + Header->Offset);
+            for(u32 J = 0; J < Header->SizeInMemory; J++)
+               *Dst08++ = *Src08++;
+         }
+         
+         KernelEntryAddress = ELFHeader->Entry;
+      } break;
+      
+      default: ASSERT(FALSE, u"Unsupported ELF type!\r\n");
    }
    
-   u64 KernelEntryAddress = BaseAddress + ELFHeader->Entry;
    Status = BootServices->FreePool(FileData);
    SASSERT(EFI_Status_Success, u"ERROR: Could not free kernel file\r\n");
    
    U64_ToStr(Buffer, KernelEntryAddress, 16);
-   SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-      u"NOTE: Kernel entry point is at ");
-   SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-      Buffer);
-   SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut,
-      u"\r\n");
-   
-   
+   SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"NOTE: Kernel entry point is at ");
+   SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, Buffer);
+   SystemTable->ConsoleOut->OutputString(SystemTable->ConsoleOut, u"\r\n");
    
    #if 0
     //

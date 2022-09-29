@@ -1,7 +1,7 @@
 ENTRY(Kernel_Entry)
 SECTIONS
 {
-  . = 0;
+  . = 4096;
   
   .text : ALIGN(4096)
   {

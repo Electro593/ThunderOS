@@ -25,8 +25,8 @@ target remote :1234
 break Kernel_Entry
 break KernelError
 
-b Exception_PageFault
-b InterruptSwitch.End
+b InterruptSwitch14
+b InterruptSwitchEnd
 
 layout split
 

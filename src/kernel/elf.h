@@ -29,14 +29,16 @@ enum elf_machine_type {
 };
 
 enum elf_program_header_type {
-    ELF_ProgramHeaderType_Null          = 0,
-    ELF_ProgramHeaderType_Load          = 1,
-    ELF_ProgramHeaderType_Dynamic       = 2,
-    ELF_ProgramHeaderType_Interp        = 3,
-    ELF_ProgramHeaderType_Note          = 4,
-    ELF_ProgramHeaderType_SHLIB         = 5,
-    ELF_ProgramHeaderType_ProgramHeader = 6,
-    ELF_ProgramHeaderType_TLS           = 7,
+    ELF_ProgramHeaderType_Null          = 0x00000000,
+    ELF_ProgramHeaderType_Load          = 0x00000001,
+    ELF_ProgramHeaderType_Dynamic       = 0x00000002,
+    ELF_ProgramHeaderType_Interp        = 0x00000003,
+    ELF_ProgramHeaderType_Note          = 0x00000004,
+    ELF_ProgramHeaderType_SHLIB         = 0x00000005,
+    ELF_ProgramHeaderType_ProgramHeader = 0x00000006,
+    ELF_ProgramHeaderType_TLS           = 0x00000007,
+    
+    ELF_ProgramHeaderType_GNUStack      = 0x6474E551,
 };
 
 enum elf_section_header_type {

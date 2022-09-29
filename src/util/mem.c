@@ -38,7 +38,7 @@ Mem_Set(vptr Dest,
 {
     u08 *Dest08 = (u08*)Dest;
     
-    u64 ToAlign = (8 - ((u64)Dest & 7)) & 8;
+    u64 ToAlign = (8 - ((u64)Dest & 7)) & 7;
     Size -= ToAlign;
     while(ToAlign) {
         *Dest08++ = Data;

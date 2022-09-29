@@ -80,8 +80,8 @@ typedef enum cr4_flag {
    #include <drivers/serial.c>
    #include <drivers/descriptors.c>
    #include <drivers/acpi.c>
-//    #include <drivers/mem.c>
-//    #include <drivers/pci.c>
+   #include <drivers/mem.c>
+   #include <drivers/pci.c>
    
 //    #include <render/font.c>
 //    #include <render/terminal.c>
@@ -106,7 +106,7 @@ extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
 extern void InvalidateTLBEntry(vptr Address);
 
-// global palloc_dir_map *DirMap;
+global palloc_dir_map *DirMap;
 
 internal void
 KernelError(c08 *File, u32 Line, c08 *Expression)
@@ -117,14 +117,14 @@ KernelError(c08 *File, u32 Line, c08 *Expression)
 #define INCLUDE_SOURCE
 //    #include <util/vector.c>
    #include <util/mem.c>
-//    #include <util/str.c>
+   #include <util/str.c>
    
    #include <drivers/serial.c>
    #include <drivers/interrupts.c>
    #include <drivers/descriptors.c>
    #include <drivers/acpi.c>
-//    #include <drivers/mem.c>
-//    #include <drivers/pci.c>
+   #include <drivers/mem.c>
+   #include <drivers/pci.c>
    
 //    #include <render/terminal.c>
 #undef INCLUDE_SOURCE
@@ -314,26 +314,6 @@ Kernel_Entry(rsdp *RSDP,
              u64 MemoryMapDescriptorSize,
              u32 MemoryMapDescriptorCount)
 {
-   __asm__("cli");
-   
-   gdt GDT;
-   tss TSS;
-   u08 RingStacks[3][4096];
-   u08 ISTStacks[7][4096];
-   GDT_Init(&GDT, &TSS, (vptr*)RingStacks, (vptr*)ISTStacks);
-   
-   APICBase = (vptr)0xFEE00000;
-   u32 *SpuriousInterruptVector = (u32*)(APICBase + 0x0F0);
-   *SpuriousInterruptVector |= 0x00000100;
-   
-   idt IDT;
-   IDT_Init(&IDT);
-   
-   __asm__("int $14");
-   
-   __asm__("sti");
-   
-   #if 0
    u32 Status;
    
    DisableInterrupts();
@@ -348,9 +328,9 @@ Kernel_Entry(rsdp *RSDP,
    //TODO: Guarantee that CR3 is recursively mapped.
    
    // Initialize as if all pages are being used
-   DirMap = (vptr)PAllocPages;
-   Mem_Set(DirMap, -1, 1024);
-   Mem_Set(DirMap->Dirs, 0, sizeof(palloc_dir*) * 256);
+//    DirMap = (vptr)PAllocPages;
+//    Mem_Set(DirMap, -1, 1024);
+//    Mem_Set(DirMap->Dirs, 0, sizeof(palloc_dir*) * 256);
    
    // 'Free' the memory that's available
 //    for(u32 I = 0; I < MemoryMapDescriptorCount; I++) {
@@ -382,7 +362,7 @@ Kernel_Entry(rsdp *RSDP,
 //       }
 //    }
    
-   InitGOP(GOP);
+//    InitGOP(GOP);
    
    Status = Serial_Init(38400, &Global.SerialPort);
    u16 SerialPort = Global.SerialPort;
@@ -390,11 +370,7 @@ Kernel_Entry(rsdp *RSDP,
       Global.Flags |= HW_HasSerial;
    }
    
-   gdt GDT;
-   tss TSS;
-   u08 RingStacks[3][4096];
-   u08 ISTStacks[7][4096];
-   GDT_Init(&GDT, &TSS, (vptr*)RingStacks, (vptr*)ISTStacks);
+   GDT_Init();
    
    acpi ACPI = InitACPI(RSDP);
    InitAPIC(ACPI);
@@ -453,9 +429,8 @@ Kernel_Entry(rsdp *RSDP,
    Serial_Write(SerialPort, "\r\nCR4: ");
    Serial_Write(SerialPort, U64_ToStr(Buffer, CR4, 16));
    Serial_Write(SerialPort, "\r\n");
-   #endif
    
-//    while(1);
+   while(1);
    
    return EFI_Status_Success;
 }
