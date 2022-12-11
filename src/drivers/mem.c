@@ -133,6 +133,8 @@ typedef struct page_map_lvl4 {
 
 typedef enum palloc_flags {
    PAlloc_Present     = 0x001,
+   PAlloc_Empty       = 0x002,
+   PAlloc_Full        = 0x004,
    PAlloc_TableMapRes = 0xC00,
 } palloc_flags;
 
@@ -186,6 +188,51 @@ typedef struct palloc_dir_map {
    u08 _Unused[1024];
 } palloc_dir_map __attribute__((aligned(4096)));
 
+typedef struct palloc_path {
+   union {
+      struct {
+         palloc_dir *Dir;
+         palloc_map *TableMap;
+         palloc_table *Table;
+         palloc_map *PageMap;
+      };
+      
+      vptr Lvl[4];
+   };
+   
+   u64 DirIndex   :  8;
+   u64 EntryIndex :  4;
+   u64 TableIndex :  5;
+   u64 MapIndex   :  9;
+   u64 PageIndex  : 14;
+   u64 _Unused    : 24;
+   
+   pptr Addr;
+} palloc_path;
+
+typedef struct vmap_path {
+   union {
+      struct {
+         page_table *Lvl1;
+         page_table *Lvl2;
+         page_table *Lvl3;
+         page_table *Lvl4;
+      };
+      
+      page_table *Lvl[4];
+   };
+   
+   u64 L4EIndex  :  9;
+   u64 L3EIndex  :  9;
+   u64 L2EIndex  :  9;
+   u64 L1EIndex  :  9;
+   u64 PageIndex :  9;
+   u64 HasLvl5   :  1;
+   u64 _Unused   : 18;
+   
+   vptr Addr;
+} vmap_path;
+
 #endif
 
 
@@ -221,6 +268,7 @@ SetPAllocTableMapAddr(palloc_dir_entry *Entry, u64 TableMapAddr)
    }
 }
 
+#if 0
 #if 0
 
 // Different to avoid infinite recursion. Instead of allocating extra
@@ -1050,5 +1098,112 @@ FreePhysicalPageRange(pptr Base, u64 PageCount)
 {
    
 }
+#endif
+
+internal void
+GetNextPartialPAllocPage(palloc_path *Path)
+{
+   u64 Index = (Path->Addr >> 12) + 1;
+   u08 *Map = (u08*)DirMap;
+   u32 C = 40;
+   
+   u64 Empty = 0;
+   
+   for(u32 I = 40; I > 0;) {
+      if(I == 27) {
+         C = 28;
+         Map = (u08*)Path->TableMap;
+      } else if(I == 13) {
+         C = 14;
+         Map = (u08*)Path->PageMap;
+      }
+      
+      b08 Skip;
+      if(Map & PAlloc_Empty) {
+         if(!(Empty & 1)) Empty = ((Index >> I) << 12) | 1;
+         Skip = TRUE;
+      } else {
+         u64 Bit = (1 << (C-I)) | (Index >> I);
+         u08 Byte = Map[Bit >> 3];
+         Skip = !!(Byte & Bit);
+      }
+      
+      if(Skip) {
+         Index = ((Index >> I) + 1) << I;
+         continue;
+      }
+      
+      I--;
+   }
+}
+
+internal palloc_path
+GetFirstPartialPAllocPage(void)
+{
+   palloc_path Result = {0};
+   
+   
+}
+
+internal vptr
+AllocatePage(void)
+{
+   palloc_path PPath = GetFirstPartialPAllocPage();
+   vmap_path VPath = GetFirstPartialVMapPage();
+   
+   vmap_full: {
+      for(s32 I = 2 + VPath.HasLvl5; I >= 0; I--) {
+         if(!VPath.Lvl[I]) {
+            if(!PPath.PageMap) goto both_full;
+            
+            AllocateVMapNode(VPath, PPath, I, &VPath, NULL);
+            GetNextPartialPAllocPage(&PPath);
+         }
+      }
+      
+      if(!PPath.PageMap) goto pmap_full;
+      goto neither_full;
+   }
+   
+   pmap_full: {
+      for(s32 I = 3; I >= 0; I--) {
+         if(!PPath.Lvl[I]) {
+            if(!VPath.Lvl1) goto both_full;
+            
+            AllocatePAllocNode(PPath, VPath, I, &PPath, NULL);
+            GetNextPartialVMapPage(&VPath);
+         }
+      }
+      
+      if(!VPath.Lvl1) goto vmap_full;
+      goto neither_full;
+   }
+   
+   both_full: {
+      u32 Count = 1 + !PPath.Dir + !PPath.TableMap + !PPath.Table + 1;
+      
+      palloc_path VMapPagesPath = PPath;
+      VMapPagesPath.PageIndex += Count;
+      VMapPages.Addr += Count << 12;
+      
+      AllocateVMapLeaf(VPath, VMapPagesPath, &VPath, NULL);
+      AllocateRangeP(VPath, PPath, VMapPagesPath);
+      
+      return VPath.Addr;
+   }
+   
+   neither_full: {
+      AllocateRangeC(VPath, PPath, 1);
+      
+      return VPath.Addr;
+   }
+}
+
+/**
+ * If both are partial, use them
+ * If virt is full, use all partial phys, then use full
+ * If phys is full, use all partial virt, then use full
+ * Else, use full
+**/
 
 #endif
