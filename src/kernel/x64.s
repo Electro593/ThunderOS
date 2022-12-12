@@ -137,6 +137,11 @@ GetCR4:
     mov rax, cr4
     ret
 
+[global SetCR0]
+SetCR0:
+    mov cr0, rdi
+    ret
+
 [global SetCR3]
 SetCR3:
     mov cr3, rdi
@@ -152,8 +157,8 @@ EnableInterrupts:
     sti
     ret
 
-[global InvalidateTLBEntry]
-InvalidateTLBEntry:
+[global InvalidatePage]
+InvalidatePage:
     invlpg [rdi]
     ret
 
@@ -162,6 +167,9 @@ InvalidateTLBEntry:
     %define label InterruptSwitch %+ i
     [global label]
     label %+ :
+    %if !(i == 8 || (i >= 10 && i <= 14) || i == 17 || i == 21)
+        push qword 0
+    %endif
     push word i
     jmp InterruptSwitchEnd
     %assign i i+1
@@ -219,6 +227,6 @@ InterruptSwitchEnd:
     pop r15
     popfq
     
-    add rsp, 2
+    add rsp, 2+8
     
     iretq

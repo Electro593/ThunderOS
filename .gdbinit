@@ -23,10 +23,6 @@ set disassembly-flavor intel
 target remote :1234
 
 break Kernel_Entry
-break KernelError
-
-b InterruptSwitch14
-b InterruptSwitchEnd
 
 layout split
 
