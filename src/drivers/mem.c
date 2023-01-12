@@ -64,20 +64,27 @@ typedef struct vmap_path {
          vmap_node *Lvl3;
          vmap_node *Lvl4;
          vmap_node *Lvl5;
+         
+         u16 L1EIndex;
+         u16 L2EIndex;
+         u16 L3EIndex;
+         u16 L4EIndex;
+         u16 L5EIndex;
       };
       
-      vmap_node *Lvl[5];
+      struct {
+         vmap_node *Lvl[5];
+         u16 LEIndex[5];
+      };
    };
    
-   u64 L5EIndex :  9;
-   u64 L4EIndex :  9;
-   u64 L3EIndex :  9;
-   u64 L2EIndex :  9;
-   u64 L1EIndex :  9;
-   u64 HasLvl5  :  1;
-   u64 _Unused  : 18;
+   u08 HasLvl5  : 1;
+   u08 Null     : 1;
+   u08 _Unused0 : 6;
+   u08 _Unused1[5];
    
    vptr Addr;
+   vptr EntryAddr;
 } vmap_path;
 
 #endif
@@ -86,30 +93,22 @@ typedef struct vmap_path {
 
 #ifdef INCLUDE_SOURCE
 
-// internal pmap_path
-// GetFirstFreePMapPage(void)
-// {
+internal vmap_node *
+GetVMapNode(vmap_path Path, u32 Level, u32 Index)
+{
+   if(Path.Null || Level < 1 || Level > 5 || Index > 511)
+      return NULL;
    
-// }
-
-// internal vptr
-// AllocatePage(void)
-// {
-//    pmap_path PPath = GetFirstFreePMapPage();
-//    vmap_path VPath = GetFirstFreeVMapSlot();
+   u64 Entry = Path.Lvl[Level-1]->Entries[Index];
+   u64 Mask = (Path.HasLvl5) ? 0x01FFFFFFFFFFF000 : 0x0000FFFFFFFFF000;
+   u64 Exp = (Path.HasLvl5) ? 7 : 16;
    
-//    for(s32 I = 2 + VPath.HasLvl5; I >= 0; I--) {
-//       if(!VPath.Lvl[I]) {
-//          VPath = MapVMapPage(VPath, PPath, I);
-//          PPath = GetNextFreePMapPage(PPath);
-//       }
-//    }
+   if(Entry & VMap_Present) {
+      return (vptr)(((s64)Entry & Mask) << Exp >> Exp);
+   }
    
-//    MapPage(VPath, PPath);
-//    FillPMapLeaf(PPath);
-   
-//    return VPath.Addr;
-// }
+   return NULL;
+}
 
 internal vmap_path
 GetVMapPathFromAddr(vptr Addr)
@@ -119,18 +118,28 @@ GetVMapPathFromAddr(vptr Addr)
    VPath.Addr = Addr;
    VPath.HasLvl5 = !!(GetCR4() & CR4_57BitLinearAddress);
    
-   u64 Indexes[5];
-   VPath.L1EIndex = Indexes[0] = ((u64)Addr >> 12) & 0x1FF;
-   VPath.L2EIndex = Indexes[1] = ((u64)Addr >> 21) & 0x1FF;
-   VPath.L3EIndex = Indexes[2] = ((u64)Addr >> 30) & 0x1FF;
-   VPath.L4EIndex = Indexes[3] = ((u64)Addr >> 39) & 0x1FF;
-   VPath.L5EIndex = Indexes[4] = ((u64)Addr >> 48) & 0x1FF;
+   VPath.L1EIndex = ((u64)Addr >> 12) & 0x1FF;
+   VPath.L2EIndex = ((u64)Addr >> 21) & 0x1FF;
+   VPath.L3EIndex = ((u64)Addr >> 30) & 0x1FF;
+   VPath.L4EIndex = ((u64)Addr >> 39) & 0x1FF;
+   VPath.L5EIndex = ((u64)Addr >> 48) & 0x1FF;
    
    u64 *EntryAddr = (u64*)0xFFFFFFFFFFFFFFF8;
-   for(u32 I = 0; I < 4 + VPath.HasLvl5; I++) {
+   for(s32 I = 4 + VPath.HasLvl5; I >= 0; I--) {
       VPath.Lvl[I] = (vptr)EntryAddr;
-      EntryAddr = (u64*)(((u64)EntryAddr << 9) | (Indexes[I] << 3));
+      EntryAddr = (u64*)(((u64)EntryAddr << 9) | (VPath.LEIndex[I] << 3));
+      
+      u64 Entry = VPath.Lvl[I]->Entries[VPath.LEIndex[I]];
+      
+      if(!(Entry & VMap_Present)) {
+         VPath.Null = TRUE;
+         return VPath;
+      }
+      
+      if(Entry & VMap_PageSize) break;
    }
+   
+   VPath.EntryAddr = EntryAddr;
    
    return VPath;
 }
@@ -139,9 +148,11 @@ internal pmap_path
 GetPMapPathFromVMapPath(vmap_path VPath)
 {
    pmap_path PPath = {0};
+   Assert(!VPath.Null);
    
-   u64 Entry = VPath.Lvl1->Entries[VPath.L1EIndex];
-   PPath.Addr = Entry & 0x000FFFFFFFFFF000;
+   u64 PAddrBase = *(u64*)VPath.EntryAddr & 0x000FFFFFFFFFF000;
+   
+   PPath.Addr = (pptr)VPath.Addr;
    PPath.Leaf = PMap;
    PPath.LeafIndex = (PPath.Addr - PMapBase) >> 12;
    
@@ -154,6 +165,56 @@ UnmapPage(vmap_path VPath)
    VPath.Lvl1->Entries[VPath.L1EIndex] = 0;
    
    InvalidatePage(VPath.Addr);
+}
+
+internal void
+UnmapPageLevel(vmap_path VPath, vmap_path VEnd, s32 Level, b08 Invalidate);
+
+internal void
+UnmapPageLevelFromStart(vmap_path VEnd, s32 Level, b08 Invalidate)
+{
+   u64 Addr = (u64)VEnd.Addr & (0xFFFFFFFFFFFFF000 << (9*Level));
+   vmap_path VStart = GetVMapPathFromAddr((vptr)Addr);
+   UnmapPageLevel(VStart, VEnd, Level, Invalidate);
+}
+
+internal void
+UnmapPageLevelToEnd(vmap_path VStart, s32 Level, b08 Invalidate)
+{
+   u64 Addr = (u64)VStart.Addr | (0x1FF000 << (9*Level));
+   vmap_path VEnd = GetVMapPathFromAddr((vptr)Addr);
+   UnmapPageLevel(VStart, VEnd, Level, Invalidate);
+}
+
+internal void
+UnmapPageLevel(vmap_path VStart, vmap_path VEnd, s32 Level, b08 Invalidate)
+{
+   //TODO: Unmap the parent if it's empty
+   
+   if(VStart.Null || VEnd.Null || Level < 0 || Level > 4) return;
+   
+   u64 Exp = 9 * Level + 12;
+   u64 Inc = 1ull << Exp;
+   u64 AddrS = (u64)VStart.Addr & 0xFFFFFFFFFFFFF000;
+   u64 AddrE = (u64)VEnd.Addr   & 0xFFFFFFFFFFFFF000;
+   
+   for(u64 I = AddrS; I <= AddrE; I += Inc) {
+      vmap_path Path = GetVMapPathFromAddr((vptr)I);
+      
+      if(I & (Inc-1)) {
+         UnmapPageLevelToEnd(Path, Level-1, Invalidate);
+         I &= ~(Inc-1);
+      } else if(0 < AddrE - I && AddrE - I < Inc) {
+         UnmapPageLevelFromStart(Path, Level-1, Invalidate);
+      } else {
+         if(Level > 0 && Path.Lvl[Level])
+            UnmapPageLevelToEnd(Path, Level-1, Invalidate);
+         
+         vmap_node *Node = GetVMapNode(Path, Level, (I >> Exp) & 0x1FF);
+         Path.Lvl[Level]->Entries[I >> Exp] = 0;
+         if(Invalidate) InvalidatePage((vptr)Node);
+      }
+   }
 }
 
 internal void
@@ -177,6 +238,35 @@ ClearPMapLeaf(pmap_path PPath)
       
       u08 Prev = (*Byte >> (Offset & 4)) & 0xF;
       Bit >>= 1;
+   }
+}
+
+internal void
+ClearPMapLeafRange(pmap_path Start, pmap_path End)
+{
+   Assert(Start.Leaf == End.Leaf);
+   Assert(Start.LeafIndex <= End.LeafIndex);
+   
+   u08 *Leaf = (u08*)Start.Leaf;
+   u64 S = Start.LeafIndex;
+   u64 E = End.LeafIndex;
+   u64 M = 7, R = 3, L = 0;
+   
+   //TODO: This doesn't update partial fullness properly
+   
+   for(u32 I = 1; E > S && I <= 13; I++) {
+      u08 *Bytes = Leaf + (0x1000 >> I);
+      s64 PBS = (s64) S    >> R;
+      s64 FBS = (s64)(S+M) >> R;
+      s64 FBE = (s64)(E-M) >> R;
+      s64 PBE = (s64) E    >> R;
+      
+      Bytes[PBS] &= ~(0xFF << ((S & M) << L));
+      Mem_Set(Bytes + FBS, 0, FBE - FBS + 1);
+      Bytes[PBE] &=  (0xFF << ((E & M) << L));
+      
+      M = 3, R = 2, L = 1;
+      S >>= 1, E >>= 1;
    }
 }
 

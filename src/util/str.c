@@ -10,7 +10,8 @@
 #ifdef INCLUDE_SOURCE
 
 internal c08 *
-U64_ToStr(c08 *Buffer, u64 N, u32 Radix) {
+U64_ToStr(c08 *Buffer, u64 N, u32 Radix)
+{
     persist c08 Chars[64] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
     
     u64 M = N;
@@ -38,6 +39,23 @@ U64_ToStr(c08 *Buffer, u64 N, u32 Radix) {
     } while(N /= Radix);
     
     return Buffer;
+}
+
+internal c08 *
+U64_ToStrP(c08 *Buffer, u64 N, u32 Radix, u32 Width, c08 PadChar)
+{
+    c08 *Str = U64_ToStr(Buffer, N, Radix);
+    
+    c08 *C = Str;
+    while(*C) C++;
+    u64 Len = (u64)C - (u64)Str;
+    
+    if(Width > Len) {
+        Mem_Cpy(Str+Width-Len, Str, Len+1);
+        Mem_Set(Str, PadChar, Width-Len);
+    }
+    
+    return Str;
 }
 
 #endif

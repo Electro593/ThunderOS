@@ -85,12 +85,14 @@ external void
 Exception_GeneralProtection(u32 ErrorCode)
 {
    Serial_Write(Global.SerialPort, "Exception hit: General protection fault\r\n");
+   __asm__("hlt");
 }
 
 external void
 Exception_PageFault(u32 ErrorCode)
 {
    Serial_Write(Global.SerialPort, "Exception hit: Page fault\r\n");
+   __asm__("hlt");
 }
 
 external void

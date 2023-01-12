@@ -34,15 +34,19 @@ typedef struct heap_handle {
 internal vptr
 Mem_Set(vptr Dest,
         u08 Data,
-        u64 Size)
+        s64 Size)
 {
+    if(Size <= 0) return Dest;
+    
     u08 *Dest08 = (u08*)Dest;
     
     u64 ToAlign = (8 - ((u64)Dest & 7)) & 7;
-    Size -= ToAlign;
-    while(ToAlign) {
-        *Dest08++ = Data;
-        ToAlign--;
+    if(Size >= ToAlign) {
+        Size -= ToAlign;
+        while(ToAlign) {
+            *Dest08++ = Data;
+            ToAlign--;
+        }
     }
     
     // TODO: Check for SSE
@@ -69,13 +73,24 @@ Mem_Cpy(vptr Dest,
         vptr Src,
         u64 Size)
 {
-    u08 *D08 = (u08*)Dest;
-    u08 *S08 = (u08*)Src;
-    while(Size)
-    {
-        *D08++ = *S08++;
-        Size--;
+    if((u64)Dest < (u64)Src+Size) {
+        u08 *D08 = (u08*)Dest+Size-1;
+        u08 *S08 = (u08*)Src+Size-1;
+        while(Size)
+        {
+            *D08-- = *S08--;
+            Size--;
+        }
+    } else {
+        u08 *D08 = (u08*)Dest;
+        u08 *S08 = (u08*)Src;
+        while(Size)
+        {
+            *D08++ = *S08++;
+            Size--;
+        }
     }
+    
     
     return Dest;
 }

@@ -109,6 +109,7 @@ extern void EnableInterrupts(void);
 extern void InvalidatePage(vptr Address);
 
 global pmap_leaf *PMap;
+global pmap_leaf _PMap;
 global u64 PMapBase;
 
 internal void
@@ -325,7 +326,7 @@ Kernel_Entry(rsdp *RSDP,
       SetCR0(GetCR0() & ~CR0_WriteProtect);
       
       b08 HasLvl5 = !!(GetCR4() & CR4_57BitLinearAddress);
-      u64 PageAddr = (s64)(GetCR3() * 0x000FFFFFFFFFF000) << 12 >> 12;
+      u64 PageAddr = (s64)(GetCR3() & 0x000FFFFFFFFFF000) << 12 >> 12;
       u64 *Entries = (u64*)PageAddr;
       
       // Recursively map CR3
@@ -338,6 +339,10 @@ Kernel_Entry(rsdp *RSDP,
       
       SetCR0(GetCR0() | CR0_WriteProtect);
    }
+   
+   PMap = &_PMap;
+   Mem_Set(PMap, 0xFF, sizeof(pmap_leaf));
+   
    
    // Initialize as if all pages are being used
    //    DirMap = (vptr)PAllocPages;
@@ -419,17 +424,46 @@ Kernel_Entry(rsdp *RSDP,
    
    Serial_Write(SerialPort, "Hello! Testing the serial output\r\n");
    
+   pptr MaxBase = 0;
+   u64 MaxPages = 0;
+   Serial_Write(SerialPort, "\r\nType\t    PStart\t    VStart\tPage Count\r\n");
    for (u32 I = 0; I < MemoryMapDescriptorCount; I++) {
       efi_memory_descriptor *Descriptor = (vptr)((u08 *)MemoryMap + MemoryMapDescriptorSize * I);
       
+      if(Descriptor->PageCount > MaxPages) {
+         MaxPages = Descriptor->PageCount;
+         MaxBase = (u64)Descriptor->PhysicalStart;
+      }
+      
       Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->Type, 16));
       Serial_Write(SerialPort, "\t");
-      Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->PhysicalStart, 16));
+      Serial_Write(SerialPort, U64_ToStrP(Buffer, (u64)Descriptor->PhysicalStart, 16, 10, ' '));
       Serial_Write(SerialPort, "\t");
-      Serial_Write(SerialPort, U64_ToStr(Buffer, (u64)Descriptor->VirtualStart, 16));
+      Serial_Write(SerialPort, U64_ToStrP(Buffer, (u64)Descriptor->VirtualStart, 16, 10, ' '));
       Serial_Write(SerialPort, "\t");
-      Serial_Write(SerialPort, U64_ToStr(Buffer, Descriptor->PageCount, 10));
+      Serial_Write(SerialPort, U64_ToStrP(Buffer, Descriptor->PageCount, 16, 10, ' '));
       Serial_Write(SerialPort, "\r\n");
+   }
+   
+   // Finish setting up the memory allocators by freeing unused memory
+   {
+      Assert(MaxPages > 0);
+      
+      PMapBase = MaxBase;
+      if(MaxPages > 0x2000) MaxPages = 0x2000;
+      
+      vptr AddrS = (vptr)PMapBase;
+      vptr AddrE = (vptr)(PMapBase + ((MaxPages-1) << 12));
+      
+      vmap_path VPathS = GetVMapPathFromAddr(AddrS);
+      vmap_path VPathE = GetVMapPathFromAddr(AddrE);
+      pmap_path PPathS = GetPMapPathFromVMapPath(VPathS);
+      pmap_path PPathE = GetPMapPathFromVMapPath(VPathE);
+      
+      ClearPMapLeafRange(PPathS, PPathE);
+      UnmapPageLevel(VPathS, VPathE, 3+VPathS.HasLvl5, FALSE);
+      
+      SetCR3(GetCR3());
    }
    
    Serial_Write(SerialPort, "CR0: ");
@@ -440,7 +474,7 @@ Kernel_Entry(rsdp *RSDP,
    Serial_Write(SerialPort, U64_ToStr(Buffer, GetCR4(), 16));
    Serial_Write(SerialPort, "\r\n");
    
-   while (1);
+   __asm__("hlt");
    
    return EFI_Status_Success;
 }
