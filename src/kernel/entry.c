@@ -17,6 +17,7 @@ asm (
 "                                  \n"
 "_start: lea ImageBase(%rip), %rdi \n"
 "        lea _DYNAMIC(%rip), %rsi  \n"
+"        sub $8, %rsp              \n"
 "        call EFI_Entry            \n"
 "        ret                       \n"
 "                                  \n"

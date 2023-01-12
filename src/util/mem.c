@@ -133,6 +133,7 @@ Mem_Cmp(vptr A,
 }
 
 internal u32
+// Mem_BytesUntil(vptr Data, u08 Byte)
 Mem_BytesUntil(u08 Byte, vptr Data)
 {
     u08 *Data08 = (u08*)Data;

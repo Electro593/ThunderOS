@@ -7,6 +7,8 @@
 **                                                                         **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifdef INCLUDE_HEADER
+
 #ifdef _X64
 
 #if defined(_MSVC)
@@ -56,6 +58,8 @@
     #define U128_Set_1x8(_0)         ((u128)(u08x16){_0, _0, _0, _0, _0, _0, _0, _0})
     #define U128_Stream(P, V)        S128_Stream(P, V)
     #define U128_MaskMove(V, M, P)   S128_MaskMove(V, M, P)
+#endif
+
 #endif
 
 #endif

@@ -19,13 +19,17 @@
 #define UNUSED(...) ((void)(__VA_ARGS__))
 
 #if defined(_MSVC)
-    #define API __stdcall
+   #define API __stdcall
 #elif defined(_GCC)
-    #define API
+   #define API
 #endif
 
 #define STATIC_ASSERT(Expression, Message) _Static_assert(Expression, Message);
-#define Assert(Expression) { if(!(Expression)) KernelError(__FILE__, __LINE__, #Expression); }
+#define Assert(Expression, ...) \
+   do { \
+      if(!(Expression)) \
+         KernelError(__FILE__, __LINE__, #Expression, "" __VA_ARGS__); \
+   } while(0);
 #define NO_DEFAULT default: { Assert(FALSE); }
 #define OFFSETOF(Type, Field) ((u64)&((Type*)0)->Field)
 #define SIZEOF(Type, Field)  (sizeof(((Type*)0)->Field))
@@ -41,36 +45,36 @@
 #define external
 
 #if defined(_MSVC)
-    typedef          __int8  s08;
-    typedef          __int16 s16;
-    typedef          __int32 s32;
-    typedef          __int64 s64;
-    typedef unsigned __int8  u08;
-    typedef unsigned __int16 u16;
-    typedef unsigned __int32 u32;
-    typedef unsigned __int64 u64;
+   typedef          __int8  s08;
+   typedef          __int16 s16;
+   typedef          __int32 s32;
+   typedef          __int64 s64;
+   typedef unsigned __int8  u08;
+   typedef unsigned __int16 u16;
+   typedef unsigned __int32 u32;
+   typedef unsigned __int64 u64;
 #else
-    typedef signed   char      s08;
-    typedef signed   short     s16;
-    typedef signed   int       s32;
-    typedef signed   long long s64;
-    typedef unsigned char      u08;
-    typedef unsigned short     u16;
-    typedef unsigned int       u32;
-    typedef unsigned long long u64;
-    
-    STATIC_ASSERT((sizeof(u08) == 1) && (sizeof(u16) == 2) &&
-                  (sizeof(u32) == 4) && (sizeof(u64) == 8),
-                  "Int sizes are incorrect");
+   typedef signed   char      s08;
+   typedef signed   short     s16;
+   typedef signed   int       s32;
+   typedef signed   long long s64;
+   typedef unsigned char      u08;
+   typedef unsigned short     u16;
+   typedef unsigned int       u32;
+   typedef unsigned long long u64;
+   
+   STATIC_ASSERT((sizeof(u08) == 1) && (sizeof(u16) == 2) &&
+                 (sizeof(u32) == 4) && (sizeof(u64) == 8),
+                "Int sizes are incorrect");
 #endif
 
-typedef float r32;
+typedef float  r32;
 typedef double r64;
-typedef s08 b08;
-typedef u08 c08;
-typedef u16 c16;
-typedef void* vptr; // Virtual pointer
-typedef u64   pptr; // Physical pointer
+typedef s08    b08;
+typedef u08    c08;
+typedef u16    c16;
+typedef void*  vptr; // Virtual pointer
+typedef u64    pptr; // Physical pointer
 
 #define FALSE 0
 #define TRUE  1
