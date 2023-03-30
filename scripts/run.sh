@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # konsole -e "gdb build/loader_dbg" &
 konsole -e "gdb" &
 

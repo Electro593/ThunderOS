@@ -73,6 +73,7 @@ typedef enum cr4_flag {
 
 #define INCLUDE_HEADER
    #include <util/intrin.h>
+   #include <util/vector.c>
    #include <util/mem.c>
    #include <util/str.c>
    
@@ -83,6 +84,8 @@ typedef enum cr4_flag {
    #include <drivers/acpi.c>
    #include <drivers/mem.c>
    #include <drivers/pci.c>
+   
+   // #include <render/software.c>
 #undef INCLUDE_HEADER
 
 extern u08 PortIn08(u16 Address);
@@ -102,13 +105,33 @@ extern void DisableInterrupts(void);
 extern void EnableInterrupts(void);
 extern void InvalidatePage(vptr Address);
 
+extern int link_test(void);
+
 internal void KernelError(c08 *File, u32 Line, c08 *Expression, c08 *Message);
+
+#define MAKE_DUMMY(Name) void Name() { KernelError(__FILE__, __LINE__, 0, #Name " does not exist"); }
+MAKE_DUMMY(sigemptyset);
+MAKE_DUMMY(sigaction);
+MAKE_DUMMY(backtrace);
+MAKE_DUMMY(backtrace_symbols);
+MAKE_DUMMY(_exit);
+MAKE_DUMMY(write);
+MAKE_DUMMY(memcpy);
+MAKE_DUMMY(memset);
+MAKE_DUMMY(memcmp);
+MAKE_DUMMY(stbsp_sprintf);
+MAKE_DUMMY(pthread_mutex_init);
+MAKE_DUMMY(pthread_mutexattr_init);
+MAKE_DUMMY(pthread_mutexattr_settype);
+MAKE_DUMMY(pthread_mutex_lock);
+MAKE_DUMMY(pthread_mutex_unlock);
 
 global pmap_leaf *PMap;
 global pmap_leaf _PMap;
 global u64 PMapBase;
 
 #define INCLUDE_SOURCE
+   #include <util/vector.c>
    #include <util/mem.c>
    #include <util/str.c>
    
@@ -118,6 +141,8 @@ global u64 PMapBase;
    #include <drivers/acpi.c>
    #include <drivers/mem.c>
    #include <drivers/pci.c>
+   
+   #include <render/software.c>
 #undef INCLUDE_SOURCE
 
 typedef struct __attribute__((packed)) bitmap_header {

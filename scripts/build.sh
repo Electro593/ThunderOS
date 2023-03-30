@@ -1,3 +1,5 @@
+#!/bin/bash
+
 ARCH=$(uname -m | sed s,i[3456789]86,ia32,)
 
 if [ ! -d build ]; then
@@ -7,6 +9,9 @@ fi
 if [ -e build/error.txt ]; then
    rm build/error.txt
 fi
+
+jai src/build.jai
+objcopy --strip-unneeded build/jai_lib.a build/jai_lib.a
 
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Wno-builtin-declaration-mismatch -fomit-frame-pointer -fno-asynchronous-unwind-tables -mno-red-zone"
 CFLAGS="$CFLAGS -Isrc -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-braces -Wno-sign-compare -Wno-pointer-sign -Wno-unused-value"
@@ -34,7 +39,7 @@ fi
 LFLAGS="-nostdlib -Bsymbolic"
 ld $LFLAGS -shared -Tscripts/elf_${ARCH}_efi.lds build/loader.o -o build/loader.so
 # ld $LFLAGS -r -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel.so
-ld $LFLAGS -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel.so
+ld $LFLAGS -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel.so build/jai_lib.a
 
 if [ $ARCH = "aarch64" ]; then
    EFIARCH="pei-aarch64-little"
