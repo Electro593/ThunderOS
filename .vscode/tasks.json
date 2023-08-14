@@ -1,0 +1,33 @@
+{
+   "version": "2.0.0",
+   "tasks": [
+      {
+         "type": "shell",
+         "label": "Build Program (SH)",
+         "command": "jai",
+         "args": [
+            "src/build.jai",
+            "-",
+            "build",
+         ],
+         "group": {
+            "kind": "build",
+            "isDefault": true
+         }
+      },
+      {
+         "type": "shell",
+         "label": "Run Program (SH)",
+         "command": "jai",
+         "args": [
+            "src/build.jai",
+            "-",
+            "run"
+         ],
+         "group": {
+            "kind": "test",
+            "isDefault": true
+         }
+      }
+   ]
+}
