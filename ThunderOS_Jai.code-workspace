@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../Programs/jai"
+		},
+		{
+			"path": "../ThunderOS"
+		}
+	],
+	"settings": {}
+}

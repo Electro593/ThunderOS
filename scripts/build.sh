@@ -16,9 +16,9 @@ if [ -e "build/loader.so" ]; then
 
 
 
-   objdump -l -S -d --source-comment build/loader.so > build/loader.s
-   objdump -l -S -d --source-comment build/kernel > build/kernel.s
-   objdump --all-headers build/loader_dbg > build/loader.dump
+   objdump -l -S -d -Mintel --source-comment build/loader.so > build/loader.s
+   objdump -l -S -d -Mintel --source-comment build/kernel > build/kernel.s
+   objdump --all-headers build/loader > build/loader.dump
    objdump --all-headers build/kernel > build/kernel.dump
 
 

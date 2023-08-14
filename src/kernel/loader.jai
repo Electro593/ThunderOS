@@ -1,19 +1,10 @@
 #import "uefi";
 
-start :: () {
-   image_handle: EFI_Handle = ---;
-   system_table: *EFI_System_Table = ---;
+#program_export
+uefi_entry :: (load_base: u64, reserved: *void, image_handle: EFI_Handle, system_table: *EFI_System_Table) -> EFI_Status #c_call {
+   system_table.console_out.clear_screen(system_table.console_out);
    
-   #asm {
-      image_handle === c;
-      system_table === d;
-   }
-   
-   uefi_entry(image_handle, system_table);
-}
-
-uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table) -> EFI_Status {
-   system_table.console_out.output_string(system_table.console_out, c16.[#char "H", #char "i", #char "\r", #char "\n", 0].data);
+   while true { }
    
    return .SUCCESS;
 }

@@ -19,6 +19,8 @@ build_kernel :: () {
    options.intermediate_path = "../build/temp";
    options.entry_point_name = "kernel_entry";
    
+   set_optimization(*options, .VERY_DEBUG);
+   
    import_path: [..]string;
    array_add(*import_path, ..options.import_path);
    array_add(*import_path, "modules");
@@ -33,11 +35,17 @@ build_loader :: () {
    workspace := compiler_create_workspace("Loader");
    
    options := get_build_options(workspace);
+   options.output_type = .DYNAMIC_LIBRARY;
    options.dead_code_elimination = .ALL;
-   options.output_executable_name = "loader.so";
+   options.output_executable_name = "loader";
    options.output_path = "../build";
    options.intermediate_path = "../build/temp";
-   options.entry_point_name = "start";
+   options.entry_point_name = "_start";
+   options.use_custom_link_command = true;
+   
+   set_optimization(*options, .OPTIMIZED_VERY_SMALL);
+   
+   options.llvm_options.command_line = .["", "--relocation-model=pic"];
    
    import_path: [..]string;
    array_add(*import_path, ..options.import_path);
@@ -46,7 +54,29 @@ build_loader :: () {
    
    set_build_options(options, workspace);
    
+   run_command("nasm", "-g", "-f", "elf64", "src/kernel/asm.s", "-o", "build/loader.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
+   
+   compiler_begin_intercept(workspace);
    add_build_file("kernel/loader.jai", workspace);
+   while true {
+      msg := compiler_wait_for_message();
+      if msg.kind == {
+         case .PHASE;
+            message: *Message_Phase = xx msg;
+            if message.phase == .READY_FOR_CUSTOM_LINK_COMMAND {
+               arguments: [..]string;
+               array_add(*arguments, "ld", "-nostdlib", "-Bsymbolic", "-shared", "-Tscripts/elf_x86_64_efi.lds", "-o", "build/loader.so", "build/loader.o");
+               array_add(*arguments, ..message.compiler_generated_object_files);
+               print("%\n", arguments);
+               run_command(..arguments, working_directory="..", capture_and_return_output=true, print_captured_output=true);
+               compiler_custom_link_command_is_complete(workspace);
+            }
+         
+         case .COMPLETE;
+            break;
+      }
+   }
+   compiler_end_intercept(workspace);
 }
 
 build_image :: () {
