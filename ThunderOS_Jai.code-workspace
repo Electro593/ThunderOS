@@ -4,10 +4,10 @@
 			"path": "."
 		},
 		{
-			"path": "../../Programs/jai"
+			"path": "../ThunderOS"
 		},
 		{
-			"path": "../ThunderOS"
+			"path": "../../jai"
 		}
 	],
 	"settings": {}

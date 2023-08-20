@@ -94,9 +94,75 @@ EFI_Protocol :: struct {
 // Utility Macros
 //
 
-// efi_call :: (procedure: Code, args: ..Any) -> EFI_Status #expand {
+efi_call :: (efi_procedure: (arg1: $A1) -> $R #c_call #no_context, arg1: A1) -> R #c_call #no_context {
+   result: R = ---;
    
-// }
+   #asm {
+      rax: gpr === a;
+      rcx: gpr === c;
+      rdx: gpr === d;
+      r8: gpr === 8;
+      r9: gpr === 9;
+      r10: gpr === 10;
+      r11: gpr === 11;
+      xmm0: vec === 0;
+      xmm1: vec === 1;
+      xmm2: vec === 2;
+      xmm3: vec === 3;
+      xmm4: vec === 4;
+      xmm5: vec === 5;
+      
+      result === a;
+      mov rax, efi_procedure;
+   }
+   
+   handle_arg(rcx, xmm0, arg1);
+   handle_arg(rdx, xmm1);
+   handle_arg(r8, xmm2);
+   handle_arg(r9, xmm3);
+   
+   handle_arg(r10, xmm4);
+   handle_arg(r11, xmm5);
+   
+   (cast(() #no_call #no_context) efi_procedure)();
+   
+   return result;
+}
+
+efi_call :: (efi_procedure: (arg1: $A1, arg2: $A2) -> $R #c_call #no_context, arg1: A1, arg2: A2) -> R #c_call #no_context {
+   result: R = ---;
+   
+   #asm {
+      rax: gpr === a;
+      rcx: gpr === c;
+      rdx: gpr === d;
+      r8: gpr === 8;
+      r9: gpr === 9;
+      r10: gpr === 10;
+      r11: gpr === 11;
+      xmm0: vec === 0;
+      xmm1: vec === 1;
+      xmm2: vec === 2;
+      xmm3: vec === 3;
+      xmm4: vec === 4;
+      xmm5: vec === 5;
+      
+      result === a;
+      mov rax, efi_procedure;
+   }
+   
+   handle_arg(rcx, xmm0, arg1);
+   handle_arg(rdx, xmm1, arg2);
+   handle_arg(r8, xmm2);
+   handle_arg(r9, xmm3);
+   
+   handle_arg(r10, xmm4);
+   handle_arg(r11, xmm5);
+   
+   (cast(() #no_call #no_context) efi_procedure)();
+   
+   return result;
+}
 
 efi_revision :: (major: u16, minor: u16) -> u32 #expand {
    return (major << 16) | minor;
@@ -169,90 +235,90 @@ EFI_Boot_Services :: struct {
    //
    // Task Priority Services
    //
-   raise_tpl:   (new_tpl: EFI_TPL) -> EFI_TPL #c_call; // EFI 1.0+
-   restore_tpl: (old_tpl: EFI_TPL) #c_call; // EFI 1.0+
+   raise_tpl:   (new_tpl: EFI_TPL) -> EFI_TPL #c_call #no_context; // EFI 1.0+
+   restore_tpl: (old_tpl: EFI_TPL) #c_call #no_context; // EFI 1.0+
 
    //
    // Memory Services
    //
-   allocate_pages: (type: EFI_Allocate_Type, memory_type: EFI_Memory_Type, pages: uint, memory: *EFI_Physical_Address) -> EFI_Status #c_call; // EFI 1.0+
-   free_pages:     (memory: EFI_Physical_Address, pages: uint) -> EFI_Status #c_call; // EFI 1.0+
-   get_memory_map: (memory_map_size: *uint, memory_map: *EFI_Memory_Descriptor, map_key: *uint, descriptor_size: *uint, descriptor_version: *u32) -> EFI_Status #c_call; // EFI 1.0+
-   allocate_pool:  (pool_type: EFI_Memory_Type, size: uint, buffer: **void) -> EFI_Status #c_call; // EFI 1.0+
-   free_pool:      (buffer: *void) -> EFI_Status #c_call; // EFI 1.0+
+   allocate_pages: (type: EFI_Allocate_Type, memory_type: EFI_Memory_Type, pages: uint, memory: *EFI_Physical_Address) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   free_pages:     (memory: EFI_Physical_Address, pages: uint) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   get_memory_map: (memory_map_size: *uint, memory_map: *EFI_Memory_Descriptor, map_key: *uint, descriptor_size: *uint, descriptor_version: *u32) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   allocate_pool:  (pool_type: EFI_Memory_Type, size: uint, buffer: **void) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   free_pool:      (buffer: *void) -> EFI_Status #c_call #no_context; // EFI 1.0+
    
    //
    // Event & Timer Services
    //
-   create_event:   (type: EFI_Event_Type, notify_tpl: EFI_TPL, notify_function: EFI_Event_Notify, notify_context: *void, event: *EFI_Event) -> EFI_Status #c_call; // EFI 1.0+
-   set_timer:      (event: EFI_Event, type: EFI_Timer_Delay, trigger_time: u64) -> EFI_Status #c_call; // EFI 1.0+
-   wait_for_event: (number_of_events: uint, events: *EFI_Event, index: *uint) -> EFI_Status #c_call; // EFI 1.0+
-   signal_event:   (event: EFI_Event) -> EFI_Status #c_call; // EFI 1.0+
-   close_event:    (event: EFI_Event) -> EFI_Status #c_call; // EFI 1.0+
-   check_event:    (event: EFI_Event) -> EFI_Status #c_call; // EFI 1.0+
+   create_event:   (type: EFI_Event_Type, notify_tpl: EFI_TPL, notify_function: EFI_Event_Notify, notify_context: *void, event: *EFI_Event) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   set_timer:      (event: EFI_Event, type: EFI_Timer_Delay, trigger_time: u64) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   wait_for_event: (number_of_events: uint, events: *EFI_Event, index: *uint) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   signal_event:   (event: EFI_Event) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   close_event:    (event: EFI_Event) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   check_event:    (event: EFI_Event) -> EFI_Status #c_call #no_context; // EFI 1.0+
    
    //
    // Protocol Handler Services
    //
-   install_protocol_interface:   (handle: *EFI_Handle, protocol: *EFI_GUID, interface_type: EFI_Interface_Type, protocol_interface: *EFI_Protocol) -> EFI_Status #c_call; // EFI 1.0+
-   reinstall_protocol_interface: (handle: EFI_Handle, protocol: *EFI_GUID, old_interface: *EFI_Protocol, new_interface: *EFI_Protocol) -> EFI_Status #c_call; // EFI 1.0+
-   uninstall_protocol_interface: (handle: EFI_Handle, protocol: *EFI_GUID, protocol_interface: *EFI_Protocol) -> EFI_Status #c_call; // EFI 1.0+
-   handle_protocol:              (handle: EFI_Handle, protocol: *EFI_GUID, protocol_interface: **EFI_Protocol) -> EFI_Status #c_call; // EFI 1.0+
+   install_protocol_interface:   (handle: *EFI_Handle, protocol: *EFI_GUID, interface_type: EFI_Interface_Type, protocol_interface: *EFI_Protocol) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   reinstall_protocol_interface: (handle: EFI_Handle, protocol: *EFI_GUID, old_interface: *EFI_Protocol, new_interface: *EFI_Protocol) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   uninstall_protocol_interface: (handle: EFI_Handle, protocol: *EFI_GUID, protocol_interface: *EFI_Protocol) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   handle_protocol:              (handle: EFI_Handle, protocol: *EFI_GUID, protocol_interface: **EFI_Protocol) -> EFI_Status #c_call #no_context; // EFI 1.0+
    _reserved2:                   *void; // EFI 1.0+
-   register_protocol_notify:     (protocol: *EFI_GUID, event: EFI_Event, registration: **void) -> EFI_Status #c_call; // EFI 1.0+
-   locate_handle:                (search_type: EFI_Locate_Search_Type, protocol: *EFI_GUID, search_key: *void, buffer_size: *uint, buffer: *EFI_Handle) -> EFI_Status #c_call; // EFI 1.0+
-   locate_device_path:           (protocol: *EFI_GUID, device_path: **EFI_Device_Path_Protocol, device: *EFI_Handle) -> EFI_Status #c_call; // EFI 1.0+
-   install_configuration_table:  (guid: *EFI_GUID, table: *void) -> EFI_Status #c_call; // EFI 1.0+
+   register_protocol_notify:     (protocol: *EFI_GUID, event: EFI_Event, registration: **void) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   locate_handle:                (search_type: EFI_Locate_Search_Type, protocol: *EFI_GUID, search_key: *void, buffer_size: *uint, buffer: *EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   locate_device_path:           (protocol: *EFI_GUID, device_path: **EFI_Device_Path_Protocol, device: *EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   install_configuration_table:  (guid: *EFI_GUID, table: *void) -> EFI_Status #c_call #no_context; // EFI 1.0+
 
    //
    // Image Services
    //
-   load_image:         (boot_policy: bool, parent_image_handle: EFI_Handle, device_path: *EFI_Device_Path_Protocol, source_buffer: *void, source_size: uint, image_handle: *EFI_Handle) -> EFI_Status #c_call; // EFI 1.0+
-   start_image:        (image_handle: EFI_Handle, exit_data_size: *uint, exit_data: **c16) -> EFI_Status #c_call; // EFI 1.0+
-   exit:               (image_handle: EFI_Handle, exit_status: EFI_Status, exit_data_size: uint, exit_data: *c16) -> EFI_Status #c_call; // EFI 1.0+
-   unload_image:       (image_handle: EFI_Handle) -> EFI_Status #c_call; // EFI 1.0+
-   exit_boot_services: (image_handle: EFI_Handle, map_key: uint) -> EFI_Status #c_call; // EFI 1.0+
+   load_image:         (boot_policy: bool, parent_image_handle: EFI_Handle, device_path: *EFI_Device_Path_Protocol, source_buffer: *void, source_size: uint, image_handle: *EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   start_image:        (image_handle: EFI_Handle, exit_data_size: *uint, exit_data: **c16) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   exit:               (image_handle: EFI_Handle, exit_status: EFI_Status, exit_data_size: uint, exit_data: *c16) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   unload_image:       (image_handle: EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   exit_boot_services: (image_handle: EFI_Handle, map_key: uint) -> EFI_Status #c_call #no_context; // EFI 1.0+
 
    //
    // Miscellaneous Services
    //
-   get_next_monotonic_count: (count: *u64) -> EFI_Status #c_call; // EFI 1.0+
-   stall:                    (microseconds: uint) -> EFI_Status #c_call; // EFI 1.0+
-   set_watchdog_timer:       (timeout: uint, watchdog_code: u64, data_size: uint, watchdog_data: *c16) -> EFI_Status #c_call; // EFI 1.0+
+   get_next_monotonic_count: (count: *u64) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   stall:                    (microseconds: uint) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   set_watchdog_timer:       (timeout: uint, watchdog_code: u64, data_size: uint, watchdog_data: *c16) -> EFI_Status #c_call #no_context; // EFI 1.0+
 
    //
    // DriverSupport Services
    //
-   connect_controller:    (controller_handle: EFI_Handle, driver_image_handle: *EFI_Handle, remaining_device_path: *EFI_Device_Path_Protocol, recursive: bool) -> EFI_Status #c_call; // EFI 1.1
-   disconnect_controller: (controller_handle: EFI_Handle, driver_image_handle: EFI_Handle, child_handle: EFI_Handle) -> EFI_Status #c_call; // EFI 1.1+
+   connect_controller:    (controller_handle: EFI_Handle, driver_image_handle: *EFI_Handle, remaining_device_path: *EFI_Device_Path_Protocol, recursive: bool) -> EFI_Status #c_call #no_context; // EFI 1.1
+   disconnect_controller: (controller_handle: EFI_Handle, driver_image_handle: EFI_Handle, child_handle: EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.1+
 
    //
    // Open and Close Protocol Services
    //
-   open_protocol:             (handle: EFI_Handle, protocol: *EFI_GUID, protocol_interface: **EFI_Protocol, agent_handle: EFI_Handle, controller_handle: EFI_Handle, attributes: EFI_Open_Protocol_Attributes) -> EFI_Status #c_call; // EFI 1.1+
-   close_protocol:            (handle: EFI_Handle, protocol: *EFI_GUID, agent_handle: EFI_Handle, controller_handle: EFI_Handle) -> EFI_Status #c_call; // EFI 1.1+
-   open_protocol_information: (handle: EFI_Handle, protocol: *EFI_GUID, entry_buffer: **EFI_Open_Protocol_Information_Entry, entry_count: *uint) -> EFI_Status #c_call;// EFI 1.1+
+   open_protocol:             (handle: EFI_Handle, protocol: *EFI_GUID, protocol_interface: **EFI_Protocol, agent_handle: EFI_Handle, controller_handle: EFI_Handle, attributes: EFI_Open_Protocol_Attributes) -> EFI_Status #c_call #no_context; // EFI 1.1+
+   close_protocol:            (handle: EFI_Handle, protocol: *EFI_GUID, agent_handle: EFI_Handle, controller_handle: EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.1+
+   open_protocol_information: (handle: EFI_Handle, protocol: *EFI_GUID, entry_buffer: **EFI_Open_Protocol_Information_Entry, entry_count: *uint) -> EFI_Status #c_call #no_context; // EFI 1.1+
 
    //
    // Library Services
    //
-   protocols_per_handle:                   (handle: EFI_Handle, protocol_buffer: ***EFI_GUID, protocol_buffer_count: *uint) -> EFI_Status #c_call; // EFI 1.1+
-   locate_handle_buffer:                   (search_type: EFI_Locate_Search_Type, protocol: *EFI_GUID, search_key: *void, handle_count: *uint, buffer: **EFI_Handle) -> EFI_Status #c_call; // EFI 1.1+
-   locate_protocol:                        (protocol: *EFI_GUID, registration: *void, protocol_interface: **EFI_Protocol) -> EFI_Status #c_call; // EFI 1.1+
-   install_multiple_protocol_interfaces:   (handle: *EFI_Handle, protocols: ..*void) -> EFI_Status #c_call; // EFI 1.1+
-   uninstall_multiple_protocol_interfaces: (handle: EFI_Handle, protocols: ..*void) -> EFI_Status #c_call; // EFI 1.1+
+   protocols_per_handle:                   (handle: EFI_Handle, protocol_buffer: ***EFI_GUID, protocol_buffer_count: *uint) -> EFI_Status #c_call #no_context; // EFI 1.1+
+   locate_handle_buffer:                   (search_type: EFI_Locate_Search_Type, protocol: *EFI_GUID, search_key: *void, handle_count: *uint, buffer: **EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.1+
+   locate_protocol:                        (protocol: *EFI_GUID, registration: *void, protocol_interface: **EFI_Protocol) -> EFI_Status #c_call #no_context; // EFI 1.1+
+   install_multiple_protocol_interfaces:   (handle: *EFI_Handle, protocols: ..*void) -> EFI_Status #c_call #no_context; // EFI 1.1+
+   uninstall_multiple_protocol_interfaces: (handle: EFI_Handle, protocols: ..*void) -> EFI_Status #c_call #no_context; // EFI 1.1+
 
    //
    // 32-bit CRC Services
    //
-   calculate_crc32: (data: *void, data_size: uint, crc32: *u32) -> EFI_Status #c_call; // EFI 1.1+
+   calculate_crc32: (data: *void, data_size: uint, crc32: *u32) -> EFI_Status #c_call #no_context; // EFI 1.1+
 
    //
    // Miscellaneous Services
    //
-   copy_mem:        (destination: *void, source: *void, length: uint) #c_call; // EFI 1.1+
-   set_mem:         (buffer: *void, size: uint, value: u8) #c_call; // EFI 1.1+
-   create_event_ex: (type: EFI_Event_Type, notify_tpl: EFI_TPL, notify_function: EFI_Event_Notify, notify_context: *void, event_group: *EFI_GUID, event: *EFI_Event) -> EFI_Status #c_call; // UEFI 2.0+
+   copy_mem:        (destination: *void, source: *void, length: uint) #c_call #no_context; // EFI 1.1+
+   set_mem:         (buffer: *void, size: uint, value: u8) #c_call #no_context; // EFI 1.1+
+   create_event_ex: (type: EFI_Event_Type, notify_tpl: EFI_TPL, notify_function: EFI_Event_Notify, notify_context: *void, event_group: *EFI_GUID, event: *EFI_Event) -> EFI_Status #c_call #no_context; // UEFI 2.0+
 }
 
 EFI_Allocate_Type :: enum u32 {
@@ -366,40 +432,40 @@ EFI_Runtime_Services :: struct {
    //
    // Time Services
    //
-   get_time:        (time: *EFI_Time, capabilities: *EFI_Time_Capabilities) -> EFI_Status #c_call;
-   set_time:        (time: *EFI_Time) -> EFI_Status #c_call;
-   get_wakeup_time: (enabled: *bool, pending: *bool, time: *EFI_Time) -> EFI_Status #c_call;
-   set_wakeup_time: (enable: bool, time: *EFI_Time) -> EFI_Status #c_call;
+   get_time:        (time: *EFI_Time, capabilities: *EFI_Time_Capabilities) -> EFI_Status #c_call #no_context;
+   set_time:        (time: *EFI_Time) -> EFI_Status #c_call #no_context;
+   get_wakeup_time: (enabled: *bool, pending: *bool, time: *EFI_Time) -> EFI_Status #c_call #no_context;
+   set_wakeup_time: (enable: bool, time: *EFI_Time) -> EFI_Status #c_call #no_context;
 
    //
    // Virtual Memory Services
    //
-   set_virtual_address_map: (memory_map_size: uint, descriptor_size: uint, descriptor_version: u32, virtual_map: *EFI_Memory_Descriptor) -> EFI_Status #c_call;
-   convert_pointer:         (debug_disposition: EFI_Debug_Disposition, address: **void) -> EFI_Status #c_call;
+   set_virtual_address_map: (memory_map_size: uint, descriptor_size: uint, descriptor_version: u32, virtual_map: *EFI_Memory_Descriptor) -> EFI_Status #c_call #no_context;
+   convert_pointer:         (debug_disposition: EFI_Debug_Disposition, address: **void) -> EFI_Status #c_call #no_context;
 
    //
    // Variable Services
    //
-   get_variable:           (variable_name: *c16, vendor_guid: *EFI_GUID, attributes: *EFI_Variable_Attributes, data_size: *uint, data: *void) -> EFI_Status #c_call;
-   get_next_variable_name: (variable_name_size: *uint, variable_name: *c16, vendor_guid: *EFI_GUID) -> EFI_Status #c_call;
-   set_variable:           (variable_name: *c16, vendor_guid: *EFI_GUID, attributes: EFI_Variable_Attributes, data_size: uint, data: *void) -> EFI_Status #c_call;
+   get_variable:           (variable_name: *c16, vendor_guid: *EFI_GUID, attributes: *EFI_Variable_Attributes, data_size: *uint, data: *void) -> EFI_Status #c_call #no_context;
+   get_next_variable_name: (variable_name_size: *uint, variable_name: *c16, vendor_guid: *EFI_GUID) -> EFI_Status #c_call #no_context;
+   set_variable:           (variable_name: *c16, vendor_guid: *EFI_GUID, attributes: EFI_Variable_Attributes, data_size: uint, data: *void) -> EFI_Status #c_call #no_context;
 
    //
    // Miscellaneous Services
    //
-   get_next_high_monotonic_count: (high_count: *u32) -> EFI_Status #c_call;
-   reset_system:                  (reset_type: EFI_Reset_Type, reset_status: EFI_Status, data_size: uint, reset_data: *void) -> EFI_Status #c_call;
+   get_next_high_monotonic_count: (high_count: *u32) -> EFI_Status #c_call #no_context;
+   reset_system:                  (reset_type: EFI_Reset_Type, reset_status: EFI_Status, data_size: uint, reset_data: *void) -> EFI_Status #c_call #no_context;
 
    //
    // Capsule Services
    //
-   update_capsule:             (capsule_header_array: **EFI_Capsule_Header, capsule_count: uint, scatter_gather_list: EFI_Physical_Address) -> EFI_Status #c_call; // UEFI 2.0+
-   query_capsule_capabilities: (capsule_header_array: **EFI_Capsule_Header, capsule_count: uint, maximum_capsule_size: *u64, reset_type: *EFI_Reset_Type) -> EFI_Status #c_call; // UEFI 2.0+
+   update_capsule:             (capsule_header_array: **EFI_Capsule_Header, capsule_count: uint, scatter_gather_list: EFI_Physical_Address) -> EFI_Status #c_call #no_context; // UEFI 2.0+
+   query_capsule_capabilities: (capsule_header_array: **EFI_Capsule_Header, capsule_count: uint, maximum_capsule_size: *u64, reset_type: *EFI_Reset_Type) -> EFI_Status #c_call #no_context; // UEFI 2.0+
 
    //
    // Miscellaneous Services
    //
-   query_variable_info: (attributes: EFI_Variable_Attributes, maximum_variable_storage_size: *u64, remaining_variable_storage_size: *u64, maximum_variable_size: *u64) -> EFI_Status #c_call; // UEFI 2.0+
+   query_variable_info: (attributes: EFI_Variable_Attributes, maximum_variable_storage_size: *u64, remaining_variable_storage_size: *u64, maximum_variable_size: *u64) -> EFI_Status #c_call #no_context; // UEFI 2.0+
 }
 
 EFI_Variable_Attributes :: enum u32 {
@@ -490,23 +556,23 @@ EFI_Device_Path_Protocol :: struct {
 EFI_Simple_Text_Input_Ex_Protocol :: struct {
    using EFI_Protocol;
    
-   reset:                 (this: *EFI_Simple_Text_Input_Ex_Protocol, extended_verification: bool) -> EFI_Status #c_call;
-   read_key_stroke_ex:    (this: *EFI_Simple_Text_Input_Ex_Protocol, key_data: *EFI_Key_Data) -> EFI_Status #c_call;
+   reset:                 (this: *EFI_Simple_Text_Input_Ex_Protocol, extended_verification: bool) -> EFI_Status #c_call #no_context;
+   read_key_stroke_ex:    (this: *EFI_Simple_Text_Input_Ex_Protocol, key_data: *EFI_Key_Data) -> EFI_Status #c_call #no_context;
    wait_for_key_ex:       EFI_Event;
-   set_state:             (this: *EFI_Simple_Text_Input_Ex_Protocol, key_toggle_state: *EFI_Key_Toggle_State) -> EFI_Status #c_call;
-   register_key_notify:   (this: *EFI_Simple_Text_Input_Ex_Protocol, key_data: *EFI_Key_Data, key_notification_function: EFI_Key_Notify_Function, notify_handle: *EFI_Handle) -> EFI_Status #c_call;
-   unregister_key_notify: (this: *EFI_Simple_Text_Input_Ex_Protocol, notification_handle: EFI_Handle) -> EFI_Status #c_call;
+   set_state:             (this: *EFI_Simple_Text_Input_Ex_Protocol, key_toggle_state: *EFI_Key_Toggle_State) -> EFI_Status #c_call #no_context;
+   register_key_notify:   (this: *EFI_Simple_Text_Input_Ex_Protocol, key_data: *EFI_Key_Data, key_notification_function: EFI_Key_Notify_Function, notify_handle: *EFI_Handle) -> EFI_Status #c_call #no_context;
+   unregister_key_notify: (this: *EFI_Simple_Text_Input_Ex_Protocol, notification_handle: EFI_Handle) -> EFI_Status #c_call #no_context;
    
    GUID :: EFI_GUID.{0xdd9e7534, 0x7762, 0x4698, .[0x8c, 0x14, 0xf5, 0x85, 0x17, 0xa6, 0x25, 0xaa]};
    
-   EFI_Key_Notify_Function :: #type (key_data: *EFI_Key_Data) -> EFI_Status #c_call;
+   EFI_Key_Notify_Function :: #type (key_data: *EFI_Key_Data) -> EFI_Status #c_call #no_context;
 }
 
 EFI_Simple_Text_Input_Protocol :: struct {
    using EFI_Protocol;
    
-   reset:           (this: *EFI_Simple_Text_Input_Protocol, extended_verification: bool) -> EFI_Status #c_call;
-   read_key_stroke: (this: *EFI_Simple_Text_Input_Protocol, key: *EFI_Input_Key) -> EFI_Status #c_call;
+   reset:           (this: *EFI_Simple_Text_Input_Protocol, extended_verification: bool) -> EFI_Status #c_call #no_context;
+   read_key_stroke: (this: *EFI_Simple_Text_Input_Protocol, key: *EFI_Input_Key) -> EFI_Status #c_call #no_context;
    wait_for_key:    EFI_Event;
    
    GUID :: EFI_GUID.{0x387477c1, 0x69c7, 0x11d2, .[0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]};
@@ -515,15 +581,15 @@ EFI_Simple_Text_Input_Protocol :: struct {
 EFI_Simple_Text_Output_Protocol :: struct {
    using EFI_Protocol;
    
-   reset:               (this: *EFI_Simple_Text_Output_Protocol, extended_verification: bool) -> EFI_Status #c_call;
-   output_string:       (this: *EFI_Simple_Text_Output_Protocol, string: *c16) -> EFI_Status #c_call;
-   test_string:         (this: *EFI_Simple_Text_Output_Protocol, string: *c16) -> EFI_Status #c_call;
-   query_mode:          (this: *EFI_Simple_Text_Output_Protocol, mode_number: uint, columns: *uint, rows: *uint) -> EFI_Status #c_call;
-   set_mode:            (this: *EFI_Simple_Text_Output_Protocol, mode_number: uint) -> EFI_Status #c_call;
-   set_attribute:       (this: *EFI_Simple_Text_Output_Protocol, attribute: Attribute) -> EFI_Status #c_call;
-   clear_screen:        (this: *EFI_Simple_Text_Output_Protocol) -> EFI_Status #c_call;
-   set_cursor_position: (this: *EFI_Simple_Text_Output_Protocol, column: uint, row: uint) -> EFI_Status #c_call;
-   enable_cursor:       (this: *EFI_Simple_Text_Output_Protocol, visible: bool) -> EFI_Status #c_call;
+   reset:               (this: *EFI_Simple_Text_Output_Protocol, extended_verification: bool) -> EFI_Status #c_call #no_context;
+   output_string:       (this: *EFI_Simple_Text_Output_Protocol, string: *c16) -> EFI_Status #c_call #no_context;
+   test_string:         (this: *EFI_Simple_Text_Output_Protocol, string: *c16) -> EFI_Status #c_call #no_context;
+   query_mode:          (this: *EFI_Simple_Text_Output_Protocol, mode_number: uint, columns: *uint, rows: *uint) -> EFI_Status #c_call #no_context;
+   set_mode:            (this: *EFI_Simple_Text_Output_Protocol, mode_number: uint) -> EFI_Status #c_call #no_context;
+   set_attribute:       (this: *EFI_Simple_Text_Output_Protocol, attribute: Attribute) -> EFI_Status #c_call #no_context;
+   clear_screen:        (this: *EFI_Simple_Text_Output_Protocol) -> EFI_Status #c_call #no_context;
+   set_cursor_position: (this: *EFI_Simple_Text_Output_Protocol, column: uint, row: uint) -> EFI_Status #c_call #no_context;
+   enable_cursor:       (this: *EFI_Simple_Text_Output_Protocol, visible: bool) -> EFI_Status #c_call #no_context;
    mode:                *Simple_Text_Output_Mode;
    
    GUID :: EFI_GUID.{0x387477c2, 0x69c7, 0x11d2, .[0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]};
@@ -605,4 +671,42 @@ EFI_Key_Toggle_State :: enum_flags u8 {
    
    KEY_STATE_EXPOSED  :: 1 << 6;
    TOGGLE_STATE_VALID :: 1 << 7;
+}
+
+#scope_file
+
+#import "Basic";
+#import "Compiler";
+#import "Machine_X64";
+
+
+arg_is_a :: (arg: $A, expected: Type_Info_Tag) -> bool {
+   return type_info(A).type == expected;
+}
+
+arg_is_within_size :: (arg: $A, expected: int) -> bool {
+   return type_info(A).runtime_size <= expected;
+}
+
+handle_arg :: (gpr: __reg, vec: __reg, arg: $A) #expand {
+   #if #run arg_is_a(A, .FLOAT) {
+      #asm {
+         xor gpr, gpr;
+         movss vec, [arg];
+      }
+   } else #if #run arg_is_within_size(A, 8) {
+      #asm {
+         mov gpr, arg;
+         pxor vec, vec;
+      }
+   } else {
+      #assert false, "invalid %", arg;
+   }
+}
+
+handle_arg :: (gpr: __reg, vec: __reg) #expand {
+   #asm {
+      xor gpr, gpr;
+      pxor vec, vec;
+   }
 }

@@ -54,7 +54,7 @@ build_loader :: () {
    
    set_build_options(options, workspace);
    
-   run_command("nasm", "-g", "-f", "elf64", "src/kernel/asm.s", "-o", "build/loader.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
+   run_command("nasm", "-g", "-f", "elf64", "src/kernel/_start.s", "-o", "build/loader.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
    
    compiler_begin_intercept(workspace);
    add_build_file("kernel/loader.jai", workspace);
@@ -65,13 +65,13 @@ build_loader :: () {
             message: *Message_Phase = xx msg;
             if message.phase == .READY_FOR_CUSTOM_LINK_COMMAND {
                arguments: [..]string;
-               array_add(*arguments, "ld", "-nostdlib", "-Bsymbolic", "-shared", "-Tscripts/elf_x86_64_efi.lds", "-o", "build/loader.so", "build/loader.o");
+               array_add(*arguments, "lld-linux", "-flavor", "Gnu", "-nostdlib", "-Bsymbolic", "-shared", "-Tscripts/elf_x86_64_efi.lds", "-o", "build/loader.so", "build/loader.o");
                array_add(*arguments, ..message.compiler_generated_object_files);
                print("%\n", arguments);
                run_command(..arguments, working_directory="..", capture_and_return_output=true, print_captured_output=true);
                compiler_custom_link_command_is_complete(workspace);
             }
-         
+            
          case .COMPLETE;
             break;
       }

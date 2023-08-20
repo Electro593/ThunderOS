@@ -4,7 +4,7 @@
       {
          "type": "shell",
          "label": "Build Program (SH)",
-         "command": "jai",
+         "command": "jai-linux",
          "args": [
             "src/build.jai",
             "-",
@@ -18,7 +18,7 @@
       {
          "type": "shell",
          "label": "Run Program (SH)",
-         "command": "jai",
+         "command": "jai-linux",
          "args": [
             "src/build.jai",
             "-",
