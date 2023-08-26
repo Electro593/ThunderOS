@@ -2,9 +2,6 @@
 // Data Types
 //
 
-c8 :: #type,distinct u8;
-c16 :: #type,distinct u16;
-
 #if size_of(*void) == 4 {
    uint :: u32;
 } else #if size_of(*void) == 8 {
@@ -20,7 +17,7 @@ EFI_GUID :: struct {
    data4: [8]u8;
 }
 
-EFI_Status :: enum {
+EFI_Status :: enum int {
    SUCCESS :: 0;
    
    WARNING :: 0 << 63;
@@ -87,86 +84,7 @@ EFI_IPv4_Address :: #type,distinct [ 4]u8;
 EFI_IPv6_Address :: #type,distinct [16]u8;
 EFI_IP_Address   :: #type,distinct [16]u32;
 
-EFI_Protocol :: struct {
-}
-
-//
-// Utility Macros
-//
-
-efi_call :: (efi_procedure: (arg1: $A1) -> $R #c_call #no_context, arg1: A1) -> R #c_call #no_context {
-   result: R = ---;
-   
-   #asm {
-      rax: gpr === a;
-      rcx: gpr === c;
-      rdx: gpr === d;
-      r8: gpr === 8;
-      r9: gpr === 9;
-      r10: gpr === 10;
-      r11: gpr === 11;
-      xmm0: vec === 0;
-      xmm1: vec === 1;
-      xmm2: vec === 2;
-      xmm3: vec === 3;
-      xmm4: vec === 4;
-      xmm5: vec === 5;
-      
-      result === a;
-      mov rax, efi_procedure;
-   }
-   
-   handle_arg(rcx, xmm0, arg1);
-   handle_arg(rdx, xmm1);
-   handle_arg(r8, xmm2);
-   handle_arg(r9, xmm3);
-   
-   handle_arg(r10, xmm4);
-   handle_arg(r11, xmm5);
-   
-   (cast(() #no_call #no_context) efi_procedure)();
-   
-   return result;
-}
-
-efi_call :: (efi_procedure: (arg1: $A1, arg2: $A2) -> $R #c_call #no_context, arg1: A1, arg2: A2) -> R #c_call #no_context {
-   result: R = ---;
-   
-   #asm {
-      rax: gpr === a;
-      rcx: gpr === c;
-      rdx: gpr === d;
-      r8: gpr === 8;
-      r9: gpr === 9;
-      r10: gpr === 10;
-      r11: gpr === 11;
-      xmm0: vec === 0;
-      xmm1: vec === 1;
-      xmm2: vec === 2;
-      xmm3: vec === 3;
-      xmm4: vec === 4;
-      xmm5: vec === 5;
-      
-      result === a;
-      mov rax, efi_procedure;
-   }
-   
-   handle_arg(rcx, xmm0, arg1);
-   handle_arg(rdx, xmm1, arg2);
-   handle_arg(r8, xmm2);
-   handle_arg(r9, xmm3);
-   
-   handle_arg(r10, xmm4);
-   handle_arg(r11, xmm5);
-   
-   (cast(() #no_call #no_context) efi_procedure)();
-   
-   return result;
-}
-
-efi_revision :: (major: u16, minor: u16) -> u32 #expand {
-   return (major << 16) | minor;
-}
+EFI_Protocol :: struct { }
 
 //
 // (4) EFI System Table
@@ -179,7 +97,7 @@ EFI_Table_Signature :: enum u64 {
 }
 
 EFI_Table_Revision :: enum u32 {
-   SPECIFICATION :: #run efi_revision(2, 100);
+   SPECIFICATION :: (2 << 16) | 100;
    
    SYSTEM_TABLE     :: SPECIFICATION;
    BOOT_SERVICES    :: SPECIFICATION;
@@ -199,7 +117,7 @@ EFI_System_Table :: struct {
    signature = .SYSTEM_TABLE;
    revision  = .SYSTEM_TABLE;
    
-   firmware_vendor: *c16;
+   firmware_vendor: *u16;
    firmware_revision: u32;
    
    console_in_handle: EFI_Handle;
@@ -274,8 +192,8 @@ EFI_Boot_Services :: struct {
    // Image Services
    //
    load_image:         (boot_policy: bool, parent_image_handle: EFI_Handle, device_path: *EFI_Device_Path_Protocol, source_buffer: *void, source_size: uint, image_handle: *EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.0+
-   start_image:        (image_handle: EFI_Handle, exit_data_size: *uint, exit_data: **c16) -> EFI_Status #c_call #no_context; // EFI 1.0+
-   exit:               (image_handle: EFI_Handle, exit_status: EFI_Status, exit_data_size: uint, exit_data: *c16) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   start_image:        (image_handle: EFI_Handle, exit_data_size: *uint, exit_data: **u16) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   exit:               (image_handle: EFI_Handle, exit_status: EFI_Status, exit_data_size: uint, exit_data: *u16) -> EFI_Status #c_call #no_context; // EFI 1.0+
    unload_image:       (image_handle: EFI_Handle) -> EFI_Status #c_call #no_context; // EFI 1.0+
    exit_boot_services: (image_handle: EFI_Handle, map_key: uint) -> EFI_Status #c_call #no_context; // EFI 1.0+
 
@@ -284,7 +202,7 @@ EFI_Boot_Services :: struct {
    //
    get_next_monotonic_count: (count: *u64) -> EFI_Status #c_call #no_context; // EFI 1.0+
    stall:                    (microseconds: uint) -> EFI_Status #c_call #no_context; // EFI 1.0+
-   set_watchdog_timer:       (timeout: uint, watchdog_code: u64, data_size: uint, watchdog_data: *c16) -> EFI_Status #c_call #no_context; // EFI 1.0+
+   set_watchdog_timer:       (timeout: uint, watchdog_code: u64, data_size: uint, watchdog_data: *u16) -> EFI_Status #c_call #no_context; // EFI 1.0+
 
    //
    // DriverSupport Services
@@ -446,9 +364,9 @@ EFI_Runtime_Services :: struct {
    //
    // Variable Services
    //
-   get_variable:           (variable_name: *c16, vendor_guid: *EFI_GUID, attributes: *EFI_Variable_Attributes, data_size: *uint, data: *void) -> EFI_Status #c_call #no_context;
-   get_next_variable_name: (variable_name_size: *uint, variable_name: *c16, vendor_guid: *EFI_GUID) -> EFI_Status #c_call #no_context;
-   set_variable:           (variable_name: *c16, vendor_guid: *EFI_GUID, attributes: EFI_Variable_Attributes, data_size: uint, data: *void) -> EFI_Status #c_call #no_context;
+   get_variable:           (variable_name: *u16, vendor_guid: *EFI_GUID, attributes: *EFI_Variable_Attributes, data_size: *uint, data: *void) -> EFI_Status #c_call #no_context;
+   get_next_variable_name: (variable_name_size: *uint, variable_name: *u16, vendor_guid: *EFI_GUID) -> EFI_Status #c_call #no_context;
+   set_variable:           (variable_name: *u16, vendor_guid: *EFI_GUID, attributes: EFI_Variable_Attributes, data_size: uint, data: *void) -> EFI_Status #c_call #no_context;
 
    //
    // Miscellaneous Services
@@ -529,12 +447,66 @@ EFI_Capsule_Flags :: enum_flags u32 {
 }
 
 //
+// (9) Loaded Image Protocols
+//
+
+EFI_Loaded_Image_Protocol :: struct {
+   revision: u32 = 0x00001000;
+   
+   parent_handle: EFI_Handle;
+   
+   system_table: *EFI_System_Table;
+   
+   device_handle: EFI_Handle;
+   file_path: *EFI_Device_Path_Protocol;
+   
+   reserved: *void;
+   
+   load_options_size: u32;
+   load_options: *void;
+   
+   image_base: *void;
+   image_size: u64;
+   
+   image_code_type: EFI_Memory_Type;
+   image_data_type: EFI_Memory_Type;
+   
+   unload: (image_handle: EFI_Handle) -> EFI_Status #c_call #no_context;
+   
+   GUID :: EFI_GUID.{0x5b1b31a1, 0x9562, 0x11d2, .[0x8e, 0x3f, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]};
+}
+
+EFI_Loaded_Image_Device_Path_Protocol :: struct {
+   revision: u32 = 0x00001000;
+   
+   parent_handle: EFI_Handle;
+   
+   system_table: *EFI_System_Table;
+   
+   device_handle: EFI_Handle;
+   file_path: *EFI_Device_Path_Protocol;
+   
+   reserved: *void;
+   
+   load_options_size: u32;
+   load_options: *void;
+   
+   image_base: *void;
+   image_size: u64;
+   
+   image_code_type: EFI_Memory_Type;
+   image_data_type: EFI_Memory_Type;
+   
+   unload: (image_handle: EFI_Handle) -> EFI_Status #c_call #no_context;
+   
+   GUID :: EFI_GUID.{0xbc62157e, 0x3e33, 0x4fec, .[0x99, 0x20, 0x2d, 0x3b, 0x36, 0xd7, 0x50, 0xdf]};
+}
+
+//
 // (10) Device Path Protocols
 //
 
 EFI_Device_Path_Protocol :: struct {
-   using EFI_Protocol;
-   
    type: enum u8 {
       HARDWARE                :: 0x01;
       ACPI                    :: 0x02;
@@ -554,45 +526,42 @@ EFI_Device_Path_Protocol :: struct {
 //
 
 EFI_Simple_Text_Input_Ex_Protocol :: struct {
-   using EFI_Protocol;
-   
-   reset:                 (this: *EFI_Simple_Text_Input_Ex_Protocol, extended_verification: bool) -> EFI_Status #c_call #no_context;
-   read_key_stroke_ex:    (this: *EFI_Simple_Text_Input_Ex_Protocol, key_data: *EFI_Key_Data) -> EFI_Status #c_call #no_context;
+   reset:                 (this: *This, extended_verification: bool) -> EFI_Status #c_call #no_context;
+   read_key_stroke_ex:    (this: *This, key_data: *EFI_Key_Data) -> EFI_Status #c_call #no_context;
    wait_for_key_ex:       EFI_Event;
-   set_state:             (this: *EFI_Simple_Text_Input_Ex_Protocol, key_toggle_state: *EFI_Key_Toggle_State) -> EFI_Status #c_call #no_context;
-   register_key_notify:   (this: *EFI_Simple_Text_Input_Ex_Protocol, key_data: *EFI_Key_Data, key_notification_function: EFI_Key_Notify_Function, notify_handle: *EFI_Handle) -> EFI_Status #c_call #no_context;
-   unregister_key_notify: (this: *EFI_Simple_Text_Input_Ex_Protocol, notification_handle: EFI_Handle) -> EFI_Status #c_call #no_context;
+   set_state:             (this: *This, key_toggle_state: *EFI_Key_Toggle_State) -> EFI_Status #c_call #no_context;
+   register_key_notify:   (this: *This, key_data: *EFI_Key_Data, key_notification_function: EFI_Key_Notify_Function, notify_handle: *EFI_Handle) -> EFI_Status #c_call #no_context;
+   unregister_key_notify: (this: *This, notification_handle: EFI_Handle) -> EFI_Status #c_call #no_context;
    
    GUID :: EFI_GUID.{0xdd9e7534, 0x7762, 0x4698, .[0x8c, 0x14, 0xf5, 0x85, 0x17, 0xa6, 0x25, 0xaa]};
+   This :: #this;
    
    EFI_Key_Notify_Function :: #type (key_data: *EFI_Key_Data) -> EFI_Status #c_call #no_context;
 }
 
 EFI_Simple_Text_Input_Protocol :: struct {
-   using EFI_Protocol;
-   
-   reset:           (this: *EFI_Simple_Text_Input_Protocol, extended_verification: bool) -> EFI_Status #c_call #no_context;
-   read_key_stroke: (this: *EFI_Simple_Text_Input_Protocol, key: *EFI_Input_Key) -> EFI_Status #c_call #no_context;
+   reset:           (this: *This, extended_verification: bool) -> EFI_Status #c_call #no_context;
+   read_key_stroke: (this: *This, key: *EFI_Input_Key) -> EFI_Status #c_call #no_context;
    wait_for_key:    EFI_Event;
    
    GUID :: EFI_GUID.{0x387477c1, 0x69c7, 0x11d2, .[0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]};
+   This :: #this;
 }
 
 EFI_Simple_Text_Output_Protocol :: struct {
-   using EFI_Protocol;
-   
-   reset:               (this: *EFI_Simple_Text_Output_Protocol, extended_verification: bool) -> EFI_Status #c_call #no_context;
-   output_string:       (this: *EFI_Simple_Text_Output_Protocol, string: *c16) -> EFI_Status #c_call #no_context;
-   test_string:         (this: *EFI_Simple_Text_Output_Protocol, string: *c16) -> EFI_Status #c_call #no_context;
-   query_mode:          (this: *EFI_Simple_Text_Output_Protocol, mode_number: uint, columns: *uint, rows: *uint) -> EFI_Status #c_call #no_context;
-   set_mode:            (this: *EFI_Simple_Text_Output_Protocol, mode_number: uint) -> EFI_Status #c_call #no_context;
-   set_attribute:       (this: *EFI_Simple_Text_Output_Protocol, attribute: Attribute) -> EFI_Status #c_call #no_context;
-   clear_screen:        (this: *EFI_Simple_Text_Output_Protocol) -> EFI_Status #c_call #no_context;
-   set_cursor_position: (this: *EFI_Simple_Text_Output_Protocol, column: uint, row: uint) -> EFI_Status #c_call #no_context;
-   enable_cursor:       (this: *EFI_Simple_Text_Output_Protocol, visible: bool) -> EFI_Status #c_call #no_context;
+   reset:               (this: *This, extended_verification: bool) -> EFI_Status #c_call #no_context;
+   output_string:       (this: *This, string: *u16) -> EFI_Status #c_call #no_context;
+   test_string:         (this: *This, string: *u16) -> EFI_Status #c_call #no_context;
+   query_mode:          (this: *This, mode_number: uint, columns: *uint, rows: *uint) -> EFI_Status #c_call #no_context;
+   set_mode:            (this: *This, mode_number: uint) -> EFI_Status #c_call #no_context;
+   set_attribute:       (this: *This, attribute: Attribute) -> EFI_Status #c_call #no_context;
+   clear_screen:        (this: *This) -> EFI_Status #c_call #no_context;
+   set_cursor_position: (this: *This, column: uint, row: uint) -> EFI_Status #c_call #no_context;
+   enable_cursor:       (this: *This, visible: bool) -> EFI_Status #c_call #no_context;
    mode:                *Simple_Text_Output_Mode;
    
    GUID :: EFI_GUID.{0x387477c2, 0x69c7, 0x11d2, .[0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]};
+   This :: #this;
    
    Simple_Text_Output_Mode :: struct {
       max_mode:       s32;
@@ -641,7 +610,7 @@ EFI_Key_Data :: struct {
 
 EFI_Input_Key :: struct {
    scan_code:    u16;
-   unicode_char: c16;
+   unicode_char: u16;
 }
 
 EFI_Key_State :: struct {
@@ -673,40 +642,85 @@ EFI_Key_Toggle_State :: enum_flags u8 {
    TOGGLE_STATE_VALID :: 1 << 7;
 }
 
-#scope_file
+//
+// (13) Media Access Protocols
+// TODO incomplete
+//
 
-#import "Basic";
-#import "Compiler";
-#import "Machine_X64";
-
-
-arg_is_a :: (arg: $A, expected: Type_Info_Tag) -> bool {
-   return type_info(A).type == expected;
+EFI_Simple_File_System_Protocol :: struct {
+   revision: enum u64 {
+      REVISION_1 :: 0x00010000;
+   } = .REVISION_1;
+   
+   open_volume: (this: *This, root: **EFI_File_Protocol) -> EFI_Status #c_call #no_context;
+   
+   GUID :: EFI_GUID.{0x0964e5b22, 0x6459, 0x11d2, .[0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]};
+   This :: #this;
 }
 
-arg_is_within_size :: (arg: $A, expected: int) -> bool {
-   return type_info(A).runtime_size <= expected;
+EFI_File_Protocol :: struct {
+   revision: enum u64 {
+      REVISION_1 :: 0x00010000;
+      REVISION_2 :: 0x00020000;
+   } = .REVISION_2;
+   
+   open:         (this: *This, new_handle: **EFI_File_Protocol, file_name: *u16, open_mode: EFI_File_Mode, attributes: EFI_File_Attributes) -> EFI_Status #c_call #no_context;
+   close:        (this: *This) -> EFI_Status #c_call #no_context;
+   
+   delete:       (this: *This) -> EFI_Status #c_call #no_context;
+   read:         (this: *This, buffer_size: *uint, buffer: *u8) -> EFI_Status #c_call #no_context;
+   write:        (this: *This, buffer_size: *uint, buffer: *u8) -> EFI_Status #c_call #no_context;
+   
+   get_position: (this: *This, position: *u64) -> EFI_Status #c_call #no_context;
+   set_position: (this: *This, position: u64) -> EFI_Status #c_call #no_context;
+   
+   get_info:     (this: *This, information_type: *EFI_GUID, buffer_size: *uint, buffer: *u8) -> EFI_Status #c_call #no_context;
+   set_info:     (this: *This, information_type: *EFI_GUID, buffer_size: uint, buffer: *u8) -> EFI_Status #c_call #no_context;
+   
+   flush:        (this: *This) -> EFI_Status #c_call #no_context;
+   
+   open_ex:      (this: *This, new_handle: **EFI_File_Protocol, file_name: *u16, open_mode: EFI_File_Mode, attributes: EFI_File_Attributes, token: *EFI_File_IO_Token) -> EFI_Status #c_call #no_context; // Revision 2
+   read_ex:      (this: *This, token: *EFI_File_IO_Token) -> EFI_Status #c_call #no_context; // Revision 2
+   write_ex:     (this: *This, token: *EFI_File_IO_Token) -> EFI_Status #c_call #no_context; // Revision 2
+   flush_ex:     (this: *This, token: *EFI_File_IO_Token) -> EFI_Status #c_call #no_context; // Revision 2
+   
+   This :: #this;
 }
 
-handle_arg :: (gpr: __reg, vec: __reg, arg: $A) #expand {
-   #if #run arg_is_a(A, .FLOAT) {
-      #asm {
-         xor gpr, gpr;
-         movss vec, [arg];
-      }
-   } else #if #run arg_is_within_size(A, 8) {
-      #asm {
-         mov gpr, arg;
-         pxor vec, vec;
-      }
-   } else {
-      #assert false, "invalid %", arg;
-   }
+EFI_File_Info :: struct {
+   size: u64;
+   file_size: u64;
+   physical_size: u64;
+   
+   create_time: EFI_Time;
+   last_access_time: EFI_Time;
+   modification_time: EFI_Time;
+   
+   attribute: EFI_File_Attributes;
+   
+   file_name: []u16;
+   
+   GUID :: EFI_GUID.{0x09576e92, 0x6d3f, 0x11d2, .[0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b]};
 }
 
-handle_arg :: (gpr: __reg, vec: __reg) #expand {
-   #asm {
-      xor gpr, gpr;
-      pxor vec, vec;
-   }
+EFI_File_Mode :: enum_flags u64 {
+   READ   :: 1 << 0;
+   WRITE  :: 1 << 1;
+   CREATE :: 1 << 63;
+}
+
+EFI_File_Attributes :: enum_flags u64 {
+   READ_ONLY  :: 1 << 0;
+   HIDDEN     :: 1 << 1;
+   SYSTEM     :: 1 << 2;
+   DIRECTORY  :: 1 << 4;
+   ARCHIVE    :: 1 << 5;
+}
+
+EFI_File_IO_Token :: struct {
+   event: EFI_Event;
+   status: EFI_Status;
+   
+   buffer_size: uint;
+   buffer: *u8;
 }

@@ -14,15 +14,14 @@ define wc_print
   echo "\n
 end
 
-info files
-file
-add-symbol-file ./build/kernel 0x1000
+file ./build/loader
+add-symbol-file ./build/loader_dbg 0x3E3CE000
 
 set architecture i386:x86-64:intel
 set disassembly-flavor intel
 target remote :1234
 
-break Kernel_Entry
+# b uefi_entry
 
 layout split
 
