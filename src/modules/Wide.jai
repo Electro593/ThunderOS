@@ -55,7 +55,7 @@ wide :: (val: $U, $radix := 10) -> *u16 #modify {
    
    index := prefix_size + value_size;
    
-   if !val {
+   if val == 0 {
       print_char(encoding_map[0]);
    } else {
       while val > 0 {
@@ -77,6 +77,44 @@ wide :: (val: $U, $radix := 10) -> *u16 #modify {
    return buf.data + index;
 }
 
+wide :: (val: $U) -> *u16 #modify {
+   info: *Type_Info_Integer = xx U;
+   return info.type == .INTEGER && info.signed;
+} #c_call {
+   value_size: int : xx #run (Math.ceil(2.40823996531 * xx size_of(U)));
+   
+   buf :: #insert -> string {
+      builder: Basic.String_Builder;
+      Basic.init_string_builder(*builder);
+      Basic.append(*builder, "u16.[0,");
+      for 1..value_size Basic.append(*builder, "0,");
+      Basic.append(*builder, "0,];");
+      return Basic.builder_to_string(*builder);
+   }
+   
+   print_char :: (char: u16) #expand {
+      `index -= 1;
+      `buf.data[`index] = char;
+   }
+   
+   index := 1 + value_size;
+   
+   is_negative := val < 0;
+   
+   if val == 0 {
+      print_char(#char "0");
+   } else {
+      while val != 0 {
+         print_char(cast(u16) (val % 10) + #char "0");
+         val /= 10;
+      }
+   }
+   
+   if is_negative print_char(#char "-");
+   
+   return buf.data + index;
+}
+
 wide :: (val: $E) -> *u16 #modify {
    info: *Type_Info_Enum = xx E;
    return info.type == .ENUM && !(info.enum_type_flags & .FLAGS);
@@ -93,7 +131,13 @@ wide :: (val: $E) -> *u16 #modify {
          Basic.print_to_builder(*builder, "case .%; return wide(\"%\");\n", name, name);
       }
       
-      Basic.append(*builder, "case; return wide(cast(u64) val, 16);\n");
+      internal_info := type_info(E).internal_type;
+      bits := internal_info.runtime_size * 8;
+      if internal_info.signed {
+         Basic.print_to_builder(*builder, "case; return wide(cast(s%) val);\n", bits);
+      } else {
+         Basic.print_to_builder(*builder, "case; return wide(cast(u%) val, 16);\n", bits);
+      }
       Basic.append(*builder, "}\n");
       return Basic.builder_to_string(*builder);
    }

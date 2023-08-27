@@ -28,10 +28,18 @@ _start:
 ;
 [global _system_v_x86_64_abi_to_microsoft_x64_abi]
 _system_v_x86_64_abi_to_microsoft_x64_abi:
-   mov rax, rdx
-   mov rdx, rcx
-   mov rcx, rax
+   xchg rcx, rdx
    jmp rdi
+
+[global _getCR3]
+_getCR3:
+   mov rax, cr3
+   ret
+
+[global _getCR4]
+_getCR4:
+   mov rax, cr4
+   ret
 
 ;
 ; Fake Relocation Record

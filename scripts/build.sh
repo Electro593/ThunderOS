@@ -8,18 +8,16 @@ if [ -e "build/loader.so" ]; then
    else
       EFIARCH="efi-app-${ARCH}"
    fi
-   SECTIONS="-j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .reloc"
-   SECTIONS_DBG="$SECTIONS -j .debug_info -j .debug_abbrev -j .debug_loc -j .debug_aranges -j .debug_line -j .debug_macinfo -j .debug_str -j .debug_line_str"
-   objcopy $SECTIONS_DBG --target $EFIARCH --subsystem=10 build/loader.so build/loader_dbg
-   objcopy $SECTIONS     --target $EFIARCH --subsystem=10 build/loader.so build/loader
-   objcopy -R .note* -R .comment build/kernel.so build/kernel
+   objcopy -R .note* -R .comment -R .gnu* -R .hash -R .rela* -R .plt -R .eh_frame -R .dynsm -R .dynstr --target $EFIARCH --subsystem=10 build/loader.so build/loader_dbg
+   objcopy -R .note* -R .comment -R .gnu* -R .hash -R .rela* -R .plt -R .eh_frame -R .dynsm -R .dynstr -R .debug* --target $EFIARCH --subsystem=10 build/loader.so build/loader
+   objcopy build/kernel.so build/kernel;
 
 
 
    objdump -l -S -d -Mintel --source-comment build/loader.so > build/loader.s
-   objdump -l -S -d -Mintel --source-comment build/kernel > build/kernel.s
-   objdump --all-headers build/loader > build/loader.dump
-   objdump --all-headers build/kernel > build/kernel.dump
+   objdump -l -S -d -Mintel --source-comment build/kernel.so > build/kernel.s
+   objdump -x -t -r build/loader > build/loader.dump
+   objdump -x -t -T -r -R build/kernel > build/kernel.dump
 
 
 

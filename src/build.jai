@@ -16,7 +16,6 @@ build_kernel :: () {
    options.output_executable_name = "kernel";
    options.output_path = "../build";
    options.intermediate_path = "../build/temp";
-   options.entry_point_name = "kernel_entry";
    
    // set_optimization(*options, .VERY_OPTIMIZED);
    set_optimization(*options, .VERY_DEBUG);
@@ -42,7 +41,8 @@ build_loader :: () {
    options.entry_point_name = "_start";
    options.use_custom_link_command = true;
    
-   set_optimization(*options, .OPTIMIZED_VERY_SMALL);
+   // set_optimization(*options, .OPTIMIZED_VERY_SMALL);
+   set_optimization(*options, .VERY_DEBUG);
    
    import_path: [..]string;
    array_add(*import_path, ..options.import_path);

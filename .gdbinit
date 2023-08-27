@@ -15,13 +15,14 @@ define wc_print
 end
 
 file ./build/loader
-add-symbol-file ./build/loader_dbg 0x3E3CE000
+add-symbol-file ./build/loader_dbg 0x3E37A000
+add-symbol-file ./build/kernel -o 0x1000
 
 set architecture i386:x86-64:intel
 set disassembly-flavor intel
 target remote :1234
 
-# b uefi_entry
+b _start
 
 layout split
 
