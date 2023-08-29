@@ -16,9 +16,13 @@ build_kernel :: () {
    options.output_executable_name = "kernel";
    options.output_path = "../build";
    options.intermediate_path = "../build/temp";
+   options.entry_point_name = "_start";
+   options.use_custom_link_command = true;
    
    // set_optimization(*options, .VERY_OPTIMIZED);
    set_optimization(*options, .VERY_DEBUG);
+   
+   // options.additional_linker_arguments = .["-L", "../build", "../build/kernel.o"];
    
    import_path: [..]string;
    array_add(*import_path, ..options.import_path);
@@ -27,7 +31,32 @@ build_kernel :: () {
    
    set_build_options(options, workspace);
    
+   run_command("nasm", "-g", "-f", "elf64", "src/kernel/x64.s", "-o", "build/kernel.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
+   
+   compiler_begin_intercept(workspace);
    add_build_file("kernel/kernel.jai", workspace);
+   while true {
+      msg := compiler_wait_for_message();
+      if msg.kind == {
+         case .PHASE;
+            message: *Message_Phase = xx msg;
+            if message.phase == .READY_FOR_CUSTOM_LINK_COMMAND {
+               arguments: [..]string;
+               array_add(*arguments, "lld-linux", "-flavor", "Gnu", "--eh-frame-hdr", "-export-dynamic", "-shared", "--dynamic-linker", "/lib64/ld-linux-x86-64.so.2", "-rpath='$ORIGIN'", "-o", "build/kernel.so", "build/kernel.o");
+               array_add(*arguments, "-L", "/home/ariaseiler/Programming/ThunderOS_Jai", "-L", "/lib", "-L" ,"/lib64", "-L", "/usr/lib", "-L", "/usr/lib64", "-L", "/usr/lib/libfakeroot", "-L", "/usr/modules/");
+               array_add(*arguments, ..message.compiler_generated_object_files);
+               // array_add(*arguments, ..message.support_object_files);
+               // array_add(*arguments, ..message.system_libraries);
+               print("%\n", arguments);
+               run_command(..arguments, working_directory="..", capture_and_return_output=true, print_captured_output=true);
+               compiler_custom_link_command_is_complete(workspace);
+            }
+         
+         case .COMPLETE;
+            break;
+      }
+   }
+   compiler_end_intercept(workspace);
 }
 
 build_loader :: () {
@@ -41,8 +70,8 @@ build_loader :: () {
    options.entry_point_name = "_start";
    options.use_custom_link_command = true;
    
-   // set_optimization(*options, .OPTIMIZED_VERY_SMALL);
-   set_optimization(*options, .VERY_DEBUG);
+   set_optimization(*options, .OPTIMIZED_VERY_SMALL);
+   // set_optimization(*options, .VERY_DEBUG);
    
    import_path: [..]string;
    array_add(*import_path, ..options.import_path);
@@ -51,10 +80,10 @@ build_loader :: () {
    
    set_build_options(options, workspace);
    
-   run_command("nasm", "-g", "-f", "elf64", "src/kernel/x64.s", "-o", "build/loader.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
+   run_command("nasm", "-g", "-f", "elf64", "src/loader/x64.s", "-o", "build/loader.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
    
    compiler_begin_intercept(workspace);
-   add_build_file("kernel/loader.jai", workspace);
+   add_build_file("loader/loader.jai", workspace);
    while true {
       msg := compiler_wait_for_message();
       if msg.kind == {

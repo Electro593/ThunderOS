@@ -86,6 +86,11 @@ EFI_IP_Address   :: #type,distinct [16]u32;
 
 EFI_Protocol :: struct { }
 
+operator== :: (a: EFI_GUID, b: EFI_GUID) -> bool #c_call #no_context {
+   return (cast(*u64)a.data1     ).* == (cast(*u64)b.data1      ).*
+       && (cast(*u64)a.data4.data).* == (cast(*u64)b.data4.data).*;
+}
+
 //
 // (4) EFI System Table
 //
@@ -139,6 +144,9 @@ EFI_System_Table :: struct {
 EFI_Configuration_Table :: struct {
    vendor_guid:  EFI_GUID;
    vendor_table: *void;
+   
+   ACPI_1_0 :: EFI_GUID.{0xeb9d2d30, 0x2d88, 0x11d3, .[0x9a, 0x16, 0x00, 0x90, 0x27, 0x3f, 0xc1, 0x4d]};
+   ACPI_2_0 :: EFI_GUID.{0x8868e871, 0xe4f1, 0x11d3, .[0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81]};
 }
 
 //

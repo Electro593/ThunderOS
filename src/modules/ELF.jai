@@ -9,6 +9,14 @@ ELF :: struct {
    data: *u8;
 }
 
+ELF_Hash :: struct {
+   buckets: [] u32;
+   chains: [] u32;
+   
+   symbols: Sparse_Array(ELF_Symbol);
+   strings: *u8;
+}
+
 ELF_Header :: struct {
    MAGIC_NUMBER :: u8.[0x7F, #char "E", #char "L", #char "F"];
    magic_number: [4]u8 = MAGIC_NUMBER;
@@ -224,6 +232,10 @@ ELF_Section_Header :: struct {
       PRE_CONSTRUCTORS         :: 0x10;
       GROUP                    :: 0x11;
       EXTENDED_SECTION_INDICES :: 0x12;
+      
+      GNU_HASH                 :: 0x6FFFFFF6;
+      GNU_VERSION_REQUIREMENTS :: 0x6FFFFFFE;
+      GNU_VERSION              :: 0x6FFFFFFF;
    }
    
    flags: enum_flags u64 {
@@ -253,7 +265,7 @@ ELF_Section_Header :: struct {
 }
 
 ELF_Symbol :: struct {
-   name: s32;
+   name_offset: s32;
    
    info: enum u8 {
       // Type

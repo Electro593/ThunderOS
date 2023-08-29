@@ -1,4 +1,4 @@
-if [ -e "build/loader.so" ]; then
+if [ -e "build/kernel.so" ]; then
    ARCH=$(uname -m | sed s,i[3456789]86,ia32,)
 
 

@@ -23,14 +23,68 @@ align_down :: inline (value: $I, $alignment: int) -> I #modify {
    return value & ~(alignment - 1);
 }
 
+out8 :: inline (address: u16, value: u8) {
+   #asm {
+      address === d;
+      value === a;
+      out.b address, value;
+   }
+}
+
+out16 :: inline (address: u16, value: u16) {
+   #asm {
+      address === d;
+      value === a;
+      out.w address, value;
+   }
+}
+
+out32 :: inline (address: u16, value: u32) {
+   #asm {
+      address === d;
+      value === a;
+      out.d address, value;
+   }
+}
+
+in8 :: inline (address: u16) -> u8 {
+   result: u8 = ---;
+   #asm {
+      address === d;
+      result === a;
+      in.b result, address;
+   }
+   return result;
+}
+
+in16 :: inline (address: u16) -> u16 {
+   result: u16 = ---;
+   #asm {
+      address === d;
+      result === a;
+      in.w result, address;
+   }
+   return result;
+}
+
+in32 :: inline (address: u16) -> u32 {
+   result: u32 = ---;
+   #asm {
+      address === d;
+      result === a;
+      in.d result, address;
+   }
+   return result;
+}
+
+// We're not linking to the standard library, so we have to replace
+// the intrinsics. We're exporting because it prevents name mangling.
+// Unfortunately, Jai seems a bit undeterministic about which intrinsics
+// get replaced, so the loader tries to find these when it fails.
+
 #program_export
 memset :: (data: *u8, value: u8, count: s32) #c_call #no_context {
    for 0..count-1 data[it] = value;
-}
-
-#program_export
-memcpy :: (destination: *u8, source: *u8, count: s32) #c_call #no_context {
-   for 0..count-1 destination[it] = source[it];
 }
 
 #program_export
@@ -43,9 +97,10 @@ memcmp :: (a: *u8, b: *u8, count: s32) -> s32 #c_call #no_context {
       else 1;
 }
 
-// We're not linking to the standard library, so we have to replace
-// the intrinsics. We're exporting because it prevents name mangling.
-// #program_export
+#program_export
+memcpy :: (destination: *u8, source: *u8, count: s32) #c_call #no_context {
+   for 0..count-1 destination[it] = source[it];
+}
 
 #program_export sigemptyset               :: () #no_call { }
 #program_export write                     :: () #no_call { }
