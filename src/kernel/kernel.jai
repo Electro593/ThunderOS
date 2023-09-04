@@ -1,5 +1,5 @@
 #program_export
-_start :: (rsdp: *RSDP) #c_call #no_context {
+_start :: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) #c_call #no_context {
    ctx: Context = .{
       allocator = .{
          proc = dummy_allocator
@@ -11,11 +11,11 @@ _start :: (rsdp: *RSDP) #c_call #no_context {
    };
    
    push_context ctx {
-      kernel_entry(rsdp);
+      kernel_entry(memory_map, rsdp);
    }
 }
 
-kernel_entry :: (rsdp: *RSDP) {
+kernel_entry :: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) {
    #asm {
       cli;
    }
@@ -28,6 +28,8 @@ kernel_entry :: (rsdp: *RSDP) {
       print_bufferless("Initialized a serial port at I/O address %\n", cast(*void) port);
    }
    
+   initialize_page_tables(memory_map);
+   
    print_bufferless("Initializing the GDT...\n");
    initialize_gdt();
    
@@ -39,15 +41,15 @@ kernel_entry :: (rsdp: *RSDP) {
    print_bufferless("Initializing the APIC...\n");
    initialize_apic(acpi);
    
-   // print_bufferless("Initializing the IDT...\n");
-   // initialize_idt();
-   
-   // print_bufferless("Initializing the PCI...\n");
-   // initialize_pci();
+   print_bufferless("Initializing the IDT...\n");
+   initialize_idt();
    
    #asm {
       sti;
    }
+   
+   // print_bufferless("Initializing the PCI...\n");
+   // initialize_pci();
    
    print_bufferless("Halting...\n");
    #asm {
@@ -55,16 +57,28 @@ kernel_entry :: (rsdp: *RSDP) {
    }
 }
 
-
-
+kernel_asm :: #library,no_dll "../../build/kernel.o";
+get_cr0 :: () -> CR0 #c_call #no_context #foreign kernel_asm;
+get_cr3 :: () -> CR3 #c_call #no_context #foreign kernel_asm;
+get_cr4 :: () -> CR4 #c_call #no_context #foreign kernel_asm;
+set_cr0 :: (cr0: CR0) #c_call #no_context #foreign kernel_asm;
+set_cr3 :: (cr3: CR3) #c_call #no_context #foreign kernel_asm;
+set_segments :: (code_selector: Segment_Selector, stack_selector: Segment_Selector, tss_segment: Segment_Selector) #c_call #no_context #foreign kernel_asm;
+interrupt_switch: u8 #elsewhere kernel_asm;
+interrupt_switch_delta: int #elsewhere kernel_asm;
 
 #scope_file
 
 #import "Print";
+#import "Sparse_Array";
 #import "UEFI";
 
 #load "../shared.jai";
+#load "interrupts.jai";
+
 #load "../drivers/acpi.jai";
+#load "../drivers/cpu.jai";
+#load "../drivers/descriptors.jai";
 #load "../drivers/memory.jai";
 #load "../drivers/serial.jai";
 

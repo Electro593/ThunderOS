@@ -58,7 +58,7 @@ uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_
    status = efi_call(kernel_file.close, kernel_file);
    assert(.SUCCESS, "Could not close the kernel's file");
    
-   kernel_start: (rsdp: *RSDP) #c_call #no_context = xx load_elf(boot_services, console_out, kernel_data);
+   kernel_start: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) #c_call #no_context = xx load_elf(boot_services, console_out, kernel_data);
    
    status = efi_call(boot_services.free_pool, kernel_data);
    assert(.SUCCESS, "Could not free the kernel's file");
@@ -82,10 +82,16 @@ uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_
    status = efi_call(boot_services.get_memory_map, *memory_map_size, memory_map, *memory_map_key, *memory_map_descriptor_size, null);
    assert(.SUCCESS, "Could not get the memory map");
    
+   memory_map_array := Sparse_Array(EFI_Memory_Descriptor).{
+      data = xx memory_map,
+      entry_size = memory_map_descriptor_size,
+      count = memory_map_size / memory_map_descriptor_size
+   };
+   
    status = efi_call(boot_services.exit_boot_services, image_handle, memory_map_key);
    assert(.SUCCESS, "Could not exit boot services");
    
-   kernel_start(rsdp);
+   kernel_start(memory_map_array, rsdp);
    
    return .SUCCESS;
 }
@@ -104,6 +110,7 @@ uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_
 #import "Wide";
 
 #load "../shared.jai";
+
 #load "../drivers/acpi.jai";
 
 loader_asm :: #library,no_dll "build/loader.o";
@@ -232,7 +239,7 @@ load_elf_dynamic :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple
             max_address := base_address + align_up(virtual_address + size_in_memory, PAGE_SIZE);
             address := base_address + virtual_address;
             page_count: uint = (max_address - min_address) / PAGE_SIZE;
-            memory_type: EFI_Memory_Type = ifx flags & .EXECUTABLE then .LOADER_CODE else .LOADER_DATA;
+            memory_type: EFI_Memory_Type = .LOADER_DATA;
             status := efi_call(boot_services.allocate_pages, .ADDRESS, memory_type, page_count, xx *min_address);
             assert(.SUCCESS, "Could not allocate memory for an ELF segment");;
             

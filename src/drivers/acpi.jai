@@ -382,6 +382,9 @@ Local_APIC :: struct {
    divide_configuration: u32 #align 16; // Read/Write
    
    _reserved3F: u32 #align 16;
+   
+   #place in_service_0;
+   in_service: [32] u32;
 } #no_padding
 
 MASTER_PIC_COMMAND_PORT: u16 : 0x0020;

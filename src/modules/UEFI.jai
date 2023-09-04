@@ -273,11 +273,11 @@ EFI_Memory_Type :: enum u32 {
 }
 
 EFI_Memory_Attribute :: enum_flags u64 {
-   UNCACHEABLE     :: 1 << 0;
-   WRITE_COMBINING :: 1 << 1;
-   WRITE_THROUGH   :: 1 << 2;
-   WRITE_BACK      :: 1 << 3;
-   EXPORTED        :: 1 << 4;
+   CAN_BE_UNCACHED        :: 1 << 0;
+   CAN_BE_WRITE_COMBINING :: 1 << 1;
+   CAN_BE_WRITE_THROUGH   :: 1 << 2;
+   CAN_BE_WRITE_BACK      :: 1 << 3;
+   CAN_BE_EXPORTED        :: 1 << 4;
    
    WRITE_PROTECTION   :: 1 << 12;
    READ_PROTECTION    :: 1 << 13;
@@ -299,7 +299,7 @@ EFI_Memory_Descriptor :: struct {
    physical_start:  EFI_Physical_Address;
    virtual_start:   EFI_Virtual_Address;
    number_of_pages: u64;
-   attribute:       EFI_Memory_Attribute;
+   attributes:      EFI_Memory_Attribute;
 }
 
 EFI_Event_Notify :: #type (event: EFI_Event, event_context: *void);
@@ -558,8 +558,8 @@ EFI_Simple_Text_Input_Protocol :: struct {
 
 EFI_Simple_Text_Output_Protocol :: struct {
    reset:               (this: *This, extended_verification: bool) -> EFI_Status #c_call #no_context;
-   output_string:       (this: *This, string: *u16) -> EFI_Status #c_call #no_context;
-   test_string:         (this: *This, string: *u16) -> EFI_Status #c_call #no_context;
+   output_string:       (this: *This, c_string: *u16) -> EFI_Status #c_call #no_context;
+   test_string:         (this: *This, c_string: *u16) -> EFI_Status #c_call #no_context;
    query_mode:          (this: *This, mode_number: uint, columns: *uint, rows: *uint) -> EFI_Status #c_call #no_context;
    set_mode:            (this: *This, mode_number: uint) -> EFI_Status #c_call #no_context;
    set_attribute:       (this: *This, attribute: Attribute) -> EFI_Status #c_call #no_context;

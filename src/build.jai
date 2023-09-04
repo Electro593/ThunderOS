@@ -1,10 +1,13 @@
 #import "Basic";
 #import "Compiler";
 #import "Process";
+#import "String";
 
 #if OS == .LINUX {
    #import "POSIX";
 }
+
+// TODO: Auto-install nasm, qemu-full, gdb, and run 'sudo modprobe nbd'
 
 complete := 0;
 
@@ -22,8 +25,6 @@ build_kernel :: () {
    // set_optimization(*options, .VERY_OPTIMIZED);
    set_optimization(*options, .VERY_DEBUG);
    
-   // options.additional_linker_arguments = .["-L", "../build", "../build/kernel.o"];
-   
    import_path: [..]string;
    array_add(*import_path, ..options.import_path);
    array_add(*import_path, "modules");
@@ -40,16 +41,17 @@ build_kernel :: () {
       if msg.kind == {
          case .PHASE;
             message: *Message_Phase = xx msg;
-            if message.phase == .READY_FOR_CUSTOM_LINK_COMMAND {
-               arguments: [..]string;
-               array_add(*arguments, "lld-linux", "-flavor", "Gnu", "--eh-frame-hdr", "-export-dynamic", "-shared", "--dynamic-linker", "/lib64/ld-linux-x86-64.so.2", "-rpath='$ORIGIN'", "-o", "build/kernel.so", "build/kernel.o");
-               array_add(*arguments, "-L", "/home/ariaseiler/Programming/ThunderOS_Jai", "-L", "/lib", "-L" ,"/lib64", "-L", "/usr/lib", "-L", "/usr/lib64", "-L", "/usr/lib/libfakeroot", "-L", "/usr/modules/");
-               array_add(*arguments, ..message.compiler_generated_object_files);
-               // array_add(*arguments, ..message.support_object_files);
-               // array_add(*arguments, ..message.system_libraries);
-               print("%\n", arguments);
-               run_command(..arguments, working_directory="..", capture_and_return_output=true, print_captured_output=true);
-               compiler_custom_link_command_is_complete(workspace);
+            if message.phase == {
+               case .READY_FOR_CUSTOM_LINK_COMMAND;
+                  arguments: [..]string;
+                  array_add(*arguments, "lld-linux", "-flavor", "Gnu", "-nostdlib", "-Bsymbolic", "-shared", "-o", "build/kernel.so", "build/kernel.o");
+                  array_add(*arguments, "-L", "/home/ariaseiler/Programming/ThunderOS_Jai", "-L", "/lib", "-L" ,"/lib64", "-L", "/usr/lib", "-L", "/usr/lib64", "-L", "/usr/lib/libfakeroot", "-L", "/usr/modules/");
+                  array_add(*arguments, ..message.compiler_generated_object_files);
+                  // array_add(*arguments, ..message.support_object_files);
+                  // array_add(*arguments, ..message.system_libraries);
+                  print("%\n", arguments);
+                  run_command(..arguments, working_directory="..", capture_and_return_output=true, print_captured_output=true);
+                  compiler_custom_link_command_is_complete(workspace);
             }
          
          case .COMPLETE;

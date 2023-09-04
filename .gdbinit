@@ -15,7 +15,7 @@ define wc_print
 end
 
 file ./build/loader
-# add-symbol-file ./build/loader_dbg 0x3E3AF000
+# add-symbol-file ./build/loader_dbg 0x3E3B3000
 add-symbol-file ./build/kernel -o 0x1000
 
 set architecture i386:x86-64:intel

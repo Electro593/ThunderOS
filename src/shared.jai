@@ -5,6 +5,8 @@
 
 PAGE_SIZE :: 0x1000;
 
+Page :: #type,distinct [PAGE_SIZE] u8;
+
 align_up :: inline (value: $I, $alignment: int) -> I #modify {
    info: *Type_Info_Integer = xx I;
    return Bit_Operations.popcount(alignment) == 1

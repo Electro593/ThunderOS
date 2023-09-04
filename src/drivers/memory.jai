@@ -1,207 +1,247 @@
-initialize_gdt :: () {
-   code_segment_index := 1;
-   data_segment_index := 2;
-   tss\_segment_index := 3;
+initialize_page_tables :: (memory_map: Sparse_Array(EFI_Memory_Descriptor)) {
+   set_cr0(get_cr0() & ~.WRITE_PROTECT);
    
-   code_segment: Segment_Selector = xx (code_segment_index * size_of(GDT_Descriptor));
-   data_segment: Segment_Selector = xx (data_segment_index * size_of(GDT_Descriptor));
-   tss\_segment: Segment_Selector = xx (tss\_segment_index * size_of(GDT_Descriptor));
+   // Set up a recursive mapping
+   top_level_page_table.entries[511] = .PRESENT | .WRITABLE | .WRITE_THROUGH | .CACHE_DISABLE | .ADDRESS_MASK & xx *top_level_page_table;
    
-   gdt.descriptors[code_segment_index].access_byte = .PRESENT | .READABLE | .CODE | .CODE_OR_DATA;
-   gdt.descriptors[code_segment_index].attributes  = .CODE_IS_64_BIT;
+   print_bufferless("\n--------- Memory Map ---------\n");
+   print_bufferless("IDX\tPHYS\tVIRT\tCOUNT\tFLAGS\tTYPE\n");
+   unusable, external, freeable, kernel: u64;
+   for memory_map {
+      print_bufferless("[%]:\t%b16\t%b16\t%b16\t%b16\t%\n", it_index, it.physical_start, it.virtual_start, it.number_of_pages, cast(u64) it.attributes, it.type);
+      
+      if it_index == 53 {
+         #asm { mov it, it; }
+      }
+      if it_index == 55 {
+         #asm { mov it, it; }
+      }
+      
+      if it.type == {
+         // Cannot be used, mark as not present and unusable
+         case .RESERVED; #through;
+         case .UNUSABLE; #through;
+         case .UNACCEPTED; #through; // TODO What is this?
+         case;
+            unusable += it.number_of_pages;
+         
+         //  Externally in use, mark as present and unusable
+         case .RUNTIME_SERVICES_CODE; #through; // TODO Can we reclaim?
+         case .RUNTIME_SERVICES_DATA; #through; // TODO Can we reclaim?
+         case .ACPI_RECLAIM; #through; // TODO When do we reclaim?
+         case .ACPI_NVS; #through;
+         case .MMIO; #through; // TODO Can we reclaim?
+         case .MMIO_PORT_SPACE; #through; // TODO Can we reclaim?
+         case .PAL_CODE; // TODO Can we reclaim?
+            external += it.number_of_pages;
+         
+         // To be freed, mark as not present and usable
+         case .LOADER_CODE; #through;
+         case .BOOT_SERVICES_CODE; #through;
+         case .BOOT_SERVICES_DATA; #through;
+         case .CONVENTIONAL; #through;
+         case .PERSISTENT;
+            free_physical_page(xx it.physical_start);
+            freeable += it.number_of_pages;
+         
+         // The kernel's code, mark as present and usable
+         case .LOADER_DATA;
+            kernel += it.number_of_pages;
+      }
+   }
+   print_bufferless("\nUnusable: %b16", unusable * 0x1000);
+   print_bufferless("\nExternal: %b16", external * 0x1000);
+   print_bufferless("\nFreeable: %b16", freeable * 0x1000);
+   print_bufferless("\nKernel:   %b16", kernel   * 0x1000);
+   print_bufferless("\n------------------------------\n\n");
    
-   gdt.descriptors[data_segment_index].access_byte = .PRESENT | .WRITEABLE | .CODE_OR_DATA;
-   gdt.descriptors[data_segment_index].attributes  = 0;
-   
-   tss_extra_descriptor: *u64 = xx *gdt.descriptors[tss_segment_index+1];
-   gdt.descriptors[tss_segment_index].access_byte = .PRESENT | .TSS_64_BIT_AVAILABLE;
-   gdt.descriptors[tss_segment_index].attributes  = 0;
-   gdt.descriptors[tss_segment_index].limit_p1 = size_of(TSS);
-   gdt.descriptors[tss_segment_index].base_p1 = xx ((cast(u64) *tss) >>  0) & 0x0000FFFF;
-   gdt.descriptors[tss_segment_index].base_p2 = xx ((cast(u64) *tss) >> 16) & 0x000000FF;
-   gdt.descriptors[tss_segment_index].base_p3 = xx ((cast(u64) *tss) >> 24) & 0x000000FF;
-   tss_extra_descriptor.*                     = xx ((cast(u64) *tss) >> 32) & 0xFFFFFFFF;
-   
-   // One more than the index to get the end of the stack
-   tss.rsp0 = xx (ring_stacks.data + 1);
-   tss.rsp1 = xx (ring_stacks.data + 2);
-   tss.rsp2 = xx (ring_stacks.data + 3);
-   
-   tss.ist1 = xx (ist_stacks.data + 1);
-   tss.ist2 = xx (ist_stacks.data + 2);
-   tss.ist3 = xx (ist_stacks.data + 3);
-   tss.ist4 = xx (ist_stacks.data + 4);
-   tss.ist5 = xx (ist_stacks.data + 5);
-   tss.ist6 = xx (ist_stacks.data + 6);
-   tss.ist7 = xx (ist_stacks.data + 7);
-   
-   tss.io_map_offset = xx (cast(u64) *tss.io_map - cast(u64) *tss);
-   tss.io_map = 0xFFFF;
-   
-   gdtr: GDTR;
-   gdtr_address := *gdtr;
-   #asm {
-      lgdt [gdtr_address];
+   for memory_map {
+      flags: Page_Table_Entry;
+      
+      if it.type == {
+         case .RESERVED; #through;
+         case .UNUSABLE; #through;
+         case .UNACCEPTED; #through;
+         case;
+            flags = .UNUSABLE | .WRITE_THROUGH | .CACHE_DISABLE;
+         
+         case .RUNTIME_SERVICES_CODE; #through;
+         case .RUNTIME_SERVICES_DATA; #through;
+         case .ACPI_RECLAIM; #through;
+         case .ACPI_NVS; #through;
+         case .MMIO; #through;
+         case .MMIO_PORT_SPACE; #through;
+         case .PAL_CODE;
+            flags = .UNUSABLE | .WRITE_THROUGH | .CACHE_DISABLE | .PRESENT;
+         
+         case .LOADER_CODE; #through;
+         case .BOOT_SERVICES_CODE; #through;
+         case .BOOT_SERVICES_DATA; #through;
+         case .CONVENTIONAL; #through;
+         case .PERSISTENT;
+            continue;
+         
+         case .LOADER_DATA;
+            flags = .PRESENT;
+      }
+      
+      start: u64 = xx it.physical_start & xx Page_Table_Entry.ADDRESS_MASK;
+      end := start + (it.number_of_pages << 12);
+      mark_page_table_range(start, end, flags, page_table = *top_level_page_table);
    }
    
-   _set_segments(code_segment, data_segment, tss_segment);
+   set_cr3(.WRITE_THROUGH | .CACHE_DISABLE | .ADDRESS_MASK & xx *top_level_page_table);
+   set_cr0(get_cr0() | .WRITE_PROTECT);
 }
 
-// initialize_idt :: () {
-//    idtr: IDTR;
-//    idtr_address := *idtr;
-//    #asm {
-//       lidt [idtr_address];
-//    }
+mark_page_table_range :: (start: u64, end: u64, flags: Page_Table_Entry, $level := 5, page_table: *Page_Table = xx 0xFFFF_FFFF_FFFF_F000) {
+   TABLE_FLAGS: Page_Table_Entry : .WRITE_THROUGH | .CACHE_DISABLE;
+   
+   SHIFT :: 12 + (level-1) * 9;
+   ALIGN :: -1 << SHIFT;
+   
+   #if level == 5 {
+      if !has_level_5() {
+         mark_page_table_range(start, end, flags, 4, page_table);
+         return;
+      }
+   }
+   
+   start_index := (start >> SHIFT) & 0x1FF;
+   
+   for start_index .. cast(u64) 511 {
+      if start >= end break;
+      
+      page_table.entries[it] |= flags;
+      next_start := (start & ALIGN) + (1 << SHIFT);
+      defer start = next_start;
+      
+      #if level == 1 {
+         page_table.entries[it] |= .ADDRESS_MASK & xx start;
+      } else {
+         child_table: *Page_Table;
+         
+         if page_table.entries[it] & .ADDRESS_MASK {
+            child_table = xx canonicalize(xx (page_table.entries[it] & .ADDRESS_MASK));
+            mark_page_table_range(start, end, flags, level-1, child_table);
+            continue;
+         }
+         
+         #if level == 2 || level == 3 {
+            start_is_flat := !(start & ~ALIGN);
+            spans_entire_range := next_start <= end;
+            
+            if start_is_flat && spans_entire_range {
+               page_table.entries[it] |= .LARGE_PAGE | xx start;
+               continue;
+            }
+         }
+         
+         child_table = xx allocate_physical_page();
+         memset(child_table, 0, size_of(Page_Table));
+         page_table.entries[it] |= TABLE_FLAGS | .ADDRESS_MASK & xx child_table;
+         mark_page_table_range(start, end, flags, level-1, child_table);
+      }
+   }
+}
+
+// to_virtual_address :: (physical_address: *void) -> *void {
+   
 // }
+
+allocate_physical_page :: () -> *void {
+   cr0 := get_cr0();
+   set_cr0(cr0 & ~.WRITE_PROTECT);
+   defer set_cr0(cr0);
+   
+   node := physical_allocator.next_free;
+   physical_allocator.next_free = node.next_free;
+   return node;
+}
+
+free_physical_page :: (page: *void) {
+   cr0 := get_cr0();
+   set_cr0(cr0 & ~.WRITE_PROTECT);
+   defer set_cr0(cr0);
+   
+   node: *Physical_Allocator_Node = xx page;
+   node.next_free = physical_allocator.next_free;
+   physical_allocator.next_free = node;
+}
+
+canonicalize :: (address: u64) -> *void {
+   shift := get_address_shift();
+   return xx (cast(s64) address << shift >> shift);
+}
+
+decanonicalize :: (address: *void) -> u64 {
+   return xx (cast(u64) address & get_address_mask());
+}
 
 #scope_file
 
-gdt: GDT;
-// idt: IDT;
-tss: TSS;
+physical_allocator: Physical_Allocator_Node;
+top_level_page_table: Page_Table;
 
-GDTR :: struct {
-   limit: u16 = size_of(GDT) - 1;
-   base_address := *gdt #align 2;
+Physical_Allocator_Node :: struct {
+   next_free: *#this;
 }
 
-// IDTR :: struct {
-//    limit: u16 = size_of(IDT) - 1;
-//    base_address := *idt #align 2;
-// }
-
-stack :: #type,distinct [PAGE_SIZE * 1] u8;
-ist\_stacks: [7] stack #align 4096;
-ring_stacks: [3] stack #align 4096;
-
-GDT :: struct {
-   descriptors: [5] GDT_Descriptor;
+Page_Table :: struct {
+   entries: [512] Page_Table_Entry;
 }
 
-#assert size_of(GDT) <= 0x10000, "The GDT is too large!";
-// #assert size_of(IDT) <= 0x1000, "The IDT is too large!";
-
-GDT_Descriptor :: struct {
-   limit_p1: u16;
-   base_p1: u16;
-   base_p2: u8;
-   
-   access_byte: enum_flags u8 {
-      // For code or data
-      ACCESSED       :: 1 << 0;
-      WRITEABLE      :: 1 << 1; // For data; Otherwise, read-only
-      READABLE       :: 1 << 1; // For code; Otherwise, execute-only
-      EXPAND_DOWN    :: 1 << 2; // For data
-      CONFORMING     :: 1 << 2; // For code
-      CODE           :: 1 << 3; // Otherwise, data
-      
-      // For system
-      LDT                   :: 2  << 0;
-      TSS_64_BIT_AVAILABLE  :: 9  << 0;
-      TSS_64_BIT_BUSY       :: 11 << 0;
-      CALL_GATE_64_BIT      :: 12 << 0;
-      INTERRUPT_GATE_64_BIT :: 14 << 0;
-      TRAP_GATE_64_BIT      :: 15 << 0;
-      
-      TYPE_MASK      :: 15 << 0;
-      
-      CODE_OR_DATA   :: 1 << 4; // Otherwise, system
-      
-      PRIVILEGE_0    :: 0 << 5;
-      PRIVILEGE_1    :: 1 << 5;
-      PRIVILEGE_2    :: 2 << 5;
-      PRIVILEGE_3    :: 3 << 5;
-      PRIVILEGE_MASK :: 3 << 5;
-      
-      PRESENT        :: 1 << 7;
-   }
-   
-   attributes: enum_flags u8 {
-      LIMIT_P2_MASK         :: 15 << 0;
-      
-      CODE_IS_64_BIT        :: 1 << 5; // For code
-      
-      CODE_IS_32_BIT        :: 1 << 6; // For code; Otherwise, 16-bit
-      STACK_IS_ESP          :: 1 << 6; // For SS data; Otherwise, SP
-      EXPAND_DOWN_4GB_BOUND :: 1 << 6; // For expand-down data; Otherwise, 64KB 
-      
-      PAGE_GRANULARITY      :: 1 << 7; // Otherwise, byte-granularity
-   }
-   
-   base_p3: u8;
+Page_Table_Entry :: enum_flags u64 {
+   PRESENT         :: 1 << 0;
+   WRITABLE        :: 1 << 1;
+   USER_ACCESSIBLE :: 1 << 2;
+   WRITE_THROUGH   :: 1 << 3;
+   CACHE_DISABLE   :: 1 << 4;
+   ACCESSED        :: 1 << 5;
+   DIRTY           :: 1 << 6; // If LARGE_PAGE or Lvl1
+   //              :: 1 << 6; // Otherwise
+   LARGE_PAGE      :: 1 << 7; // If Lvl3 or Lvl2
+   PAT_LVL1        :: 1 << 7; // If Lvl1
+   GLOBAL          :: 1 << 8; // If (LARGE_PAGE or Lvl1) and CR4.PAGE_GLOBAL_ENABLE
+   //              :: 1 << 8; // Otherwise
+   UNUSABLE        :: 1 << 9; // (custom)
+   //              :: 1 << 10;
+   RESTART         :: 1 << 11; // For HLAT paging
+   PAT             :: 1 << 12; // If LARGE_PAGE
+   LARGE_ADDRESS_MASK_LVL3 :: 0x000F_FFFF_C000_0000; // If LARGE_PAGE and Lvl3
+   LARGE_ADDRESS_MASK_LVL2 :: 0x000F_FFFF_FFE0_0000; // If LARGE_PAGE and Lvl2
+   ADDRESS_MASK            :: 0x000F_FFFF_FFFF_F000; // Otherwise
+   //              :: 1 << 52;
+   //              :: 1 << 53;
+   //              :: 1 << 54;
+   //              :: 1 << 55;
+   //              :: 1 << 56;
+   //              :: 1 << 57;
+   //              :: 1 << 58;
+   PROTECTION_KEY_MASK :: 0xF << 59; // If (LARGE_PAGE or Lvl1) and (CR4.USER_PROTECTION_KEYS or CR4.SUPERVISOR_PROTECTION_KEYS)
+   //              :: 1 << 59; // Otherwise
+   //              :: 1 << 60; // Otherwise
+   //              :: 1 << 61; // Otherwise
+   //              :: 1 << 62; // Otherwise
+   NOT_EXECUTABLE  :: 1 << 63; // If IA32_EFER.NXE
 }
 
-// #placeholder IDT;
-// #placeholder interrupt_handlers;
-
-// generate_idt :: () {
-//    w := get_current_workspace();
-// } @RunWhenReady
-
-IDT_Descriptor :: struct {
-   offset_p1: u16;
-   
-   segment_selector: Segment_Selector;
-   
-   ist_offset: enum_flags u8 {
-      IST_MASK :: 7 << 0;
-   }
-   
-   attributes: enum_flags u8 {
-      INTERRUPT_GATE :: 14 << 1;
-      TRAP_GATE      :: 15 << 0;
-      TYPE_MASK      :: 15 << 0;
-      
-      PRIVILEGE_0    :: 0 << 5;
-      PRIVILEGE_1    :: 1 << 5;
-      PRIVILEGE_2    :: 2 << 5;
-      PRIVILEGE_3    :: 3 << 5;
-      PRIVILEGE_MASK :: 3 << 5;
-      
-      PRESENT :: 1 << 7;
-   }
-   
-   offset_p2: u16;
-   offset_p3: u32;
-   
-   _reserved: u32;
+has_level_5 :: () -> bool {
+   return !!(get_cr4() & .LINEAR_ADDRESS_57);
 }
 
-TSS :: struct {
-   _reserved0: u32;
-   
-   rsp0: u64 #align 4;
-   rsp1: u64 #align 4;
-   rsp2: u64 #align 4;
-   
-   _reserved1: u64 #align 4;
-   
-   ist1: u64 #align 4;
-   ist2: u64 #align 4;
-   ist3: u64 #align 4;
-   ist4: u64 #align 4;
-   ist5: u64 #align 4;
-   ist6: u64 #align 4;
-   ist7: u64 #align 4;
-   
-   _reserved2: u64 #align 4;
-   _reserved3: u16;
-   
-   io_map_offset: u16;
-   
-   // Not part of the spec, but it's a convenient place to put it
-   io_map: u16;
+get_page_table_entry :: (lvl1 := 511, lvl2 := 511, lvl3 := 511, lvl4 := 511, lvl5 := 511) -> *Page_Table_Entry {
+   return xx ((127 << 57) | (511 << 48) | (lvl5 << 39) | (lvl4 << 30) | (lvl3 << 21) | (lvl2 << 12) | (lvl1 << 3));
 }
 
-Segment_Selector :: enum_flags u16 {
-   RPL_MASK  :: 3 << 0;
-   
-   USING_LDT :: 1 << 2;
-   
-   INDEX_MASK :: 0xFFF8;
+get_address_shift :: () -> int {
+   return ifx has_level_5() then 7 else 14;
 }
 
-kernel_asm :: #library,no_dll "../../build/kernel.o";
+get_address_mask :: () -> u64 {
+   return xx ifx has_level_5()
+      then 0x01FF_FFFF_FFFF_F000
+      else 0x0000_FFFF_FFFF_F000;
+}
 
-_set_segments :: (code_selector: Segment_Selector, stack_selector: Segment_Selector, tss_segment: Segment_Selector) #c_call #no_context #foreign kernel_asm;
+#import "UEFI";
