@@ -127,7 +127,6 @@ build_loader :: (delta: *Delta) {
 }
 
 build_image :: (delta: *Delta) {
-   // run_command("bash", "scripts/build.sh", working_directory="..", capture_and_return_output=true, print_captured_output=true);
    result, output := run_command("mount", working_directory="..", capture_and_return_output=true);
    if !contains(output, "/mnt") {
       run_command("sudo", "qemu-nbd", "-c", "/dev/nbd0", "emulator/disk.vhd", working_directory="..", capture_and_return_output=true, print_captured_output=true);
@@ -148,7 +147,7 @@ build_image :: (delta: *Delta) {
 }
 
 #if OS == .LINUX {
-   run_debug_linux :: () {
+   run_debug :: () {
       #import "POSIX";
          
       pid := fork();
@@ -169,6 +168,8 @@ build_image :: (delta: *Delta) {
          working_directory="..", capture_and_return_output=true, print_captured_output=true
       );
    }
+} else {
+   #assert false, "Unsupported OS";
 }
 
 #run {
@@ -189,14 +190,12 @@ build_image :: (delta: *Delta) {
       if options.compile_time_command_line[0] == {
          case "build";
             build_kernel(*delta);
-            build_loader(*delta);
+            // build_loader(*delta);
          case "run";
             if delta.loader_binaries || delta.kernel_binaries {
                build_image(*delta);
             }
-            #if OS == .LINUX {
-               run_debug_linux();
-            }
+            run_debug();
       }
    }
    
