@@ -27,7 +27,7 @@ build_kernel :: (delta: *Delta) {
    
    set_build_options(options, workspace);
    
-   run_command("nasm", "-g", "-f", "elf64", "src/kernel/x64.s", "-o", "build/kernel.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
+   run_command("nasm", "-g", "-f", "elf64", "src/kernel/x64.s", "-o", "build/temp/kernel.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
    
    compiler_begin_intercept(workspace);
    add_build_file("kernel/kernel.jai", workspace);
@@ -39,7 +39,7 @@ build_kernel :: (delta: *Delta) {
             if message.phase == {
                case .READY_FOR_CUSTOM_LINK_COMMAND;
                   arguments: [..]string;
-                  array_add(*arguments, "lld-linux", "-flavor", "Gnu", "-nostdlib", "-Bsymbolic", "-shared", "-o", "build/kernel.so", "build/kernel.o");
+                  array_add(*arguments, "lld-linux", "-flavor", "Gnu", "-nostdlib", "-Bsymbolic", "-shared", "-o", "build/kernel.so", "build/temp/kernel.o");
                   array_add(*arguments, "-L", "/home/ariaseiler/Programming/ThunderOS_Jai", "-L", "/lib", "-L" ,"/lib64", "-L", "/usr/lib", "-L", "/usr/lib64", "-L", "/usr/lib/libfakeroot", "-L", "/usr/modules/");
                   array_add(*arguments, ..message.compiler_generated_object_files);
                   print("%\n", arguments);
@@ -83,7 +83,14 @@ build_loader :: (delta: *Delta) {
    
    set_build_options(options, workspace);
    
-   run_command("nasm", "-g", "-f", "elf64", "src/loader/x64.s", "-o", "build/loader.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
+   #if CPU == .X64 {
+      efi_arch := "efi-app-x86_64";
+      write_entire_file("../build/temp/loader.lds", elf_x86_64_efi_linker_script);
+   } else {
+      #assert false, "Unsupported CPU";
+   }
+   
+   run_command("nasm", "-g", "-f", "elf64", "src/loader/x64.s", "-o", "build/temp/loader.o", working_directory="..", capture_and_return_output=true, print_captured_output=true);
    
    compiler_begin_intercept(workspace);
    add_build_file("loader/loader.jai", workspace);
@@ -94,7 +101,7 @@ build_loader :: (delta: *Delta) {
             message: *Message_Phase = xx msg;
             if message.phase == .READY_FOR_CUSTOM_LINK_COMMAND {
                arguments: [..]string;
-               array_add(*arguments, "lld-linux", "-flavor", "Gnu", "-nostdlib", "-Bsymbolic", "-shared", "-Tscripts/elf_x86_64_efi.lds", "-o", "build/loader.so", "build/loader.o");
+               array_add(*arguments, "lld-linux", "-flavor", "Gnu", "-nostdlib", "-Bsymbolic", "-shared", "-Tbuild/temp/loader.lds", "-o", "build/loader.so", "build/temp/loader.o");
                array_add(*arguments, ..message.compiler_generated_object_files);
                print("%\n", arguments);
                run_command(..arguments, working_directory="..", capture_and_return_output=true, print_captured_output=true);
@@ -106,12 +113,6 @@ build_loader :: (delta: *Delta) {
       }
    }
    compiler_end_intercept(workspace);
-   
-   #if CPU == .X64 {
-      efi_arch := "efi-app-x86_64";
-   } else {
-      #assert false, "Unsupported CPU";
-   }
    
    run_command("objcopy", "-R", ".note*", "-R", ".comment", "-R", ".gnu*", "-R", ".hash", "-R", ".rela*", "-R", ".plt", "-R", ".eh_frame", "-R", ".dynsm", "-R", ".dynstr", "-R", ".debug*", "--target", efi_arch, "--subsystem=10", "build/loader.so", "build/loader.efi", working_directory="..", capture_and_return_output=true, print_captured_output=true);
    run_command("objcopy", "-R", ".note*", "-R", ".comment", "-R", ".gnu*", "-R", ".hash", "-R", ".rela*", "-R", ".plt", "-R", ".eh_frame", "-R", ".dynsm", "-R", ".dynstr",                  "--target", efi_arch, "--subsystem=10", "build/loader.so", "build/loader.so", working_directory="..", capture_and_return_output=true, print_captured_output=true);
@@ -176,9 +177,10 @@ build_image :: (delta: *Delta) {
    options := get_build_options();
    
    make_directory_if_it_does_not_exist("../build");
+   make_directory_if_it_does_not_exist("../build/temp");
    
    delta: Delta;
-   delta_string, success := read_entire_file("../build/delta");
+   delta_string, success := read_entire_file("../build/delta", log_errors=false);
    if success {
       delta = (cast(*Delta) delta_string.data).*;
    }
@@ -205,3 +207,81 @@ Delta :: struct {
    kernel_binaries: bool;
    loader_binaries: bool;
 }
+
+elf_x86_64_efi_linker_script :: #string __STR
+OUTPUT_FORMAT("elf64-x86-64", "elf64-x86-64", "elf64-x86-64")
+OUTPUT_ARCH(i386:x86-64)
+ENTRY(_start)
+SECTIONS
+{
+  . = 0;
+  ImageBase = .;
+  /* .hash and/or .gnu.hash MUST come first! */
+  .hash : { *(.hash) }
+  .gnu.hash : { *(.gnu.hash) }
+  . = ALIGN(4096);
+  .eh_frame : 
+  { 
+    *(.eh_frame)
+  }
+  . = ALIGN(8192);
+  .text :
+  {
+   _text = .;
+   *(.text)
+   *(.text.*)
+   *(.gnu.linkonce.t.*)
+   . = ALIGN(16);
+  }
+  _etext = .;
+  _text_size = . - _text;
+  . = ALIGN(4096);
+  .reloc :
+  {
+   *(.reloc)
+  }
+  . = ALIGN(4096);
+  .data :
+  {
+   _data = .;
+   *(.rodata*)
+   *(.got.plt)
+   *(.got)
+   *(.data*)
+   *(.sdata)
+   /* the EFI loader doesn't seem to like a .bss section, so we stick
+      it all into .data: */
+   *(.sbss)
+   *(.scommon)
+   *(.dynbss)
+   *(.bss)
+   *(COMMON)
+   *(.rel.local)
+  }
+  .note.gnu.build-id : { *(.note.gnu.build-id) }
+
+  _edata = .;
+  _data_size = . - _etext;
+  . = ALIGN(4096);
+  .dynamic  : { *(.dynamic) }
+  . = ALIGN(4096);
+  .rela :
+  {
+    *(.rela.data*)
+    *(.rela.got)
+    *(.rela.stab)
+  }
+  . = ALIGN(4096);
+  .dynsym   : { *(.dynsym) }
+  . = ALIGN(4096);
+  .dynstr   : { *(.dynstr) }
+  . = ALIGN(4096);
+  .ignored.reloc :
+  {
+    *(.rela.reloc)
+    *(.eh_frame)
+    *(.note.GNU-stack)
+  }
+  .comment 0 : { *(.comment) }
+}
+__STR;
