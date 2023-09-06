@@ -14,9 +14,8 @@ define wc_print
   echo "\n
 end
 
-file ./build/loader
-# add-symbol-file ./build/loader_dbg 0x3E3B3000
-add-symbol-file ./build/kernel -o 0x1000
+add-symbol-file ./build/loader.so 0x3E3AD000
+add-symbol-file ./build/kernel.so -o 0x1000
 
 set architecture i386:x86-64:intel
 set disassembly-flavor intel

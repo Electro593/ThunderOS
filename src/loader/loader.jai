@@ -33,7 +33,7 @@ uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_
    assert(.SUCCESS, "Could not open the EFI volume");
    
    kernel_file: *EFI_File_Protocol;
-   status = efi_call(volume.open, volume, *kernel_file, wide("\\kernel"), .READ, 0);
+   status = efi_call(volume.open, volume, *kernel_file, wide("\\kernel.so"), .READ, 0);
    assert(.SUCCESS, "Could not open the kernel executable");
    
    kernel_file_info_size: uint = 0;
