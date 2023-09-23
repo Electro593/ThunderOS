@@ -14,14 +14,15 @@ define wc_print
   echo "\n
 end
 
-add-symbol-file ./build/loader.so 0x3E3AD000
+# add-symbol-file ./build/loader.so 0x3E3B3000
 add-symbol-file ./build/kernel.so -o 0x1000
 
 set architecture i386:x86-64:intel
 set disassembly-flavor intel
 target remote :1234
 
-b _start
+# b _start
+b kernel_entry
 
 layout split
 

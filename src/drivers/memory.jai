@@ -82,7 +82,7 @@ initialize_page_tables :: (memory_map: Sparse_Array(EFI_Memory_Descriptor)) {
             continue;
          
          case .LOADER_DATA;
-            flags = .PRESENT;
+            flags = .WRITABLE | .PRESENT;
       }
       
       start: u64 = xx it.physical_start & xx Page_Table_Entry.ADDRESS_MASK;
@@ -188,7 +188,7 @@ Physical_Allocator_Node :: struct {
 }
 
 Page_Table :: struct {
-   entries: [512] Page_Table_Entry;
+   entries: [512] Page_Table_Entry #align 4096;
 }
 
 Page_Table_Entry :: enum_flags u64 {

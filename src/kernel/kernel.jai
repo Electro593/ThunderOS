@@ -1,5 +1,5 @@
 #program_export
-_start :: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) #c_call #no_context {
+kernel_entry_no_context :: (stack: u64, memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) #no_context {
    ctx: Context = .{
       allocator = .{
          proc = dummy_allocator
@@ -11,11 +11,12 @@ _start :: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) #c_call
    };
    
    push_context ctx {
-      kernel_entry(memory_map, rsdp);
+      kernel_entry(stack, memory_map, rsdp);
    }
 }
 
-kernel_entry :: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) {
+#program_export
+kernel_entry :: (stack: u64, memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) {
    #asm {
       cli;
    }
@@ -27,8 +28,6 @@ kernel_entry :: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) {
       
       print_bufferless("Initialized a serial port at I/O address %\n", cast(*void) port);
    }
-   
-   initialize_page_tables(memory_map);
    
    print_bufferless("Initializing the GDT...\n");
    initialize_gdt();
@@ -43,6 +42,8 @@ kernel_entry :: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) {
    
    print_bufferless("Initializing the IDT...\n");
    initialize_idt();
+   
+   initialize_page_tables(memory_map);
    
    #asm {
       sti;

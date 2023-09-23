@@ -2,7 +2,13 @@ default rel
 
 [section .text]
 
+extern kernel_entry_no_context
 extern handle_interrupt
+
+[global _start]
+_start:
+   mov rsp, rdi
+   jmp kernel_entry_no_context
 
 [global get_cr0]
 get_cr0:
@@ -110,3 +116,5 @@ interrupt_switch:
 
 [global interrupt_switch_delta]
 interrupt_switch_delta dq INTERRUPT_SWITCH_DELTA
+
+

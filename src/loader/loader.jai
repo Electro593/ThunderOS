@@ -10,7 +10,7 @@
 }
 
 #program_export
-uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_base: *void) -> EFI_Status #c_call {
+uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_base: *void) -> EFI_Status #no_context {
    console_out := system_table.console_out;
    boot_services := system_table.boot_services;
    
@@ -58,7 +58,9 @@ uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_
    status = efi_call(kernel_file.close, kernel_file);
    assert(.SUCCESS, "Could not close the kernel's file");
    
-   kernel_start: (memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) #c_call #no_context = xx load_elf(boot_services, console_out, kernel_data);
+   kernel_start: (stack: u64, memory_map: Sparse_Array(EFI_Memory_Descriptor), rsdp: *RSDP) #no_context;
+   entry, stack := load_elf(boot_services, console_out, kernel_data);
+   kernel_start = xx entry;
    
    status = efi_call(boot_services.free_pool, kernel_data);
    assert(.SUCCESS, "Could not free the kernel's file");
@@ -91,7 +93,7 @@ uefi_entry :: (image_handle: EFI_Handle, system_table: *EFI_System_Table, image_
    status = efi_call(boot_services.exit_boot_services, image_handle, memory_map_key);
    assert(.SUCCESS, "Could not exit boot services");
    
-   kernel_start(memory_map_array, rsdp);
+   kernel_start(stack, memory_map_array, rsdp);
    
    return .SUCCESS;
 }
@@ -156,7 +158,7 @@ assert :: (expected_status: EFI_Status, message: string) #expand {
    assert(`console_out, `status, expected_status, message);
 }
 
-parse_configuration_table :: (entries: []EFI_Configuration_Table) -> rsdp: *RSDP #c_call #no_context {
+parse_configuration_table :: (entries: []EFI_Configuration_Table) -> rsdp: *RSDP #no_context {
    rsdp_1_0: *RSDP_1_0;
    rsdp_2_0: *RSDP_2_0;
    
@@ -170,7 +172,7 @@ parse_configuration_table :: (entries: []EFI_Configuration_Table) -> rsdp: *RSDP
    return rsdp;
 }
 
-load_elf :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple_Text_Output_Protocol, data: *u8) -> (() #no_call #no_context) #c_call #no_context {
+load_elf :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple_Text_Output_Protocol, data: *u8) -> (entry: () #no_call #no_context, stack: u64) #no_context {
    elf: ELF;
    
    using elf.header;
@@ -213,7 +215,8 @@ load_elf :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple_Text_Ou
          assert(false, "The EXECUTABLE ELF type is not yet implemented");
       
       case .DYNAMIC;
-         return load_elf_dynamic(boot_services, console_out, elf);
+         entry, stack := load_elf_dynamic(boot_services, console_out, elf);
+         return entry, stack;
       
       case .CORE;
          assert(false, "The CORE ELF type is not yet implemented");
@@ -222,11 +225,12 @@ load_elf :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple_Text_Ou
          assert(false, "Unknown ELF type");
    }
    
-   return null;
+   return null, 0;
 }
 
-load_elf_dynamic :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple_Text_Output_Protocol, using elf: ELF) -> (() #no_call #no_context) #c_call #no_context {
+load_elf_dynamic :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple_Text_Output_Protocol, using elf: ELF) -> (entry: () #no_call #no_context, stack: u64) #no_context {
    base_address: u64 : 0x1000;
+   stack_size: u64 : 0x100000;
    
    for program_header: program_headers {
       using program_header;
@@ -239,8 +243,7 @@ load_elf_dynamic :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple
             max_address := base_address + align_up(virtual_address + size_in_memory, PAGE_SIZE);
             address := base_address + virtual_address;
             page_count: uint = (max_address - min_address) / PAGE_SIZE;
-            memory_type: EFI_Memory_Type = .LOADER_DATA;
-            status := efi_call(boot_services.allocate_pages, .ADDRESS, memory_type, page_count, xx *min_address);
+            status := efi_call(boot_services.allocate_pages, .ADDRESS, .LOADER_DATA, page_count, xx *min_address);
             assert(.SUCCESS, "Could not allocate memory for an ELF segment");;
             
             segment_data := data + offset_in_file;
@@ -268,6 +271,11 @@ load_elf_dynamic :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple
             efi_call(console_out.output_string, console_out, wide("\r\n"));
       }
    }
+   
+   stack_address: u64;
+   status := efi_call(boot_services.allocate_pages, .ANY_PAGES, .LOADER_DATA, stack_size >> 12, xx *stack_address);
+   assert(.SUCCESS, "Could not allocate memory for an ELF stack");
+   stack := stack_address + stack_size;
    
    hash:     *ELF_Section_Header;
    rela_dyn: *ELF_Section_Header;
@@ -308,17 +316,17 @@ load_elf_dynamic :: (boot_services: *EFI_Boot_Services, console_out: *EFI_Simple
    handle_relocations(console_out, elf, base_address, rela_dyn);
    handle_relocations(console_out, elf, base_address, rela_plt);
    
-   return xx (base_address + header.entry_point_address);
+   return xx (base_address + header.entry_point_address), stack;
 }
 
-names_are_same :: (given: *u8, expected: string) -> bool #c_call #no_context {
+names_are_same :: (given: *u8, expected: string) -> bool #no_context {
    for 0..expected.count-1 {
       if given[it] != expected.data[it] return false;
    }
    return !given[expected.count];
 }
 
-names_are_same :: (given: *u8, expected: *u8) -> bool #c_call #no_context {
+names_are_same :: (given: *u8, expected: *u8) -> bool #no_context {
    while given.* && given.* == expected.* {
       given += 1;
       expected += 1;
@@ -326,7 +334,7 @@ names_are_same :: (given: *u8, expected: *u8) -> bool #c_call #no_context {
    return given.* == expected.*;
 }
 
-elf_hash :: (name: *u8) -> u32 #c_call #no_context {
+elf_hash :: (name: *u8) -> u32 #no_context {
    h: u32 = 0;
    g: u32 = ---;
    
@@ -343,7 +351,7 @@ elf_hash :: (name: *u8) -> u32 #c_call #no_context {
    return h;
 }
 
-elf_hash_lookup :: (using hash: ELF_Hash, name: *u8) -> *ELF_Symbol #c_call #no_context {
+elf_hash_lookup :: (using hash: ELF_Hash, name: *u8) -> *ELF_Symbol #no_context {
    hash_value := elf_hash(name);
    
    symbol_index := buckets[hash_value % buckets.count];
@@ -359,7 +367,7 @@ elf_hash_lookup :: (using hash: ELF_Hash, name: *u8) -> *ELF_Symbol #c_call #no_
    return ifx symbol_index == 0 then null else symbol;
 }
 
-fix_external_symbols :: (using elf: ELF, hash_table: *ELF_Section_Header) #c_call #no_context {
+fix_external_symbols :: (using elf: ELF, hash_table: *ELF_Section_Header) #no_context {
    // We're not linking to external libraries, so we'll
    // reroute undefined symbols to their kernel definitions.
    // To do this, we'll do a linear search through the symbol
@@ -419,7 +427,7 @@ fix_external_symbols :: (using elf: ELF, hash_table: *ELF_Section_Header) #c_cal
    }
 }
 
-handle_relocations :: (console_out: *EFI_Simple_Text_Output_Protocol, using elf: ELF, base_address: u64, using rela: *ELF_Section_Header) #c_call #no_context {
+handle_relocations :: (console_out: *EFI_Simple_Text_Output_Protocol, using elf: ELF, base_address: u64, using rela: *ELF_Section_Header) #no_context {
    relocations: Sparse_Array(ELF_Relocation_With_Addend) = .{
       data = data + offset_in_file,
       entry_size = entry_size,
@@ -464,7 +472,7 @@ handle_relocations :: (console_out: *EFI_Simple_Text_Output_Protocol, using elf:
    }
 }
 
-print_notes :: (console_out: *EFI_Simple_Text_Output_Protocol, notes: *ELF_Note, notes_end: *ELF_Note) #c_call #no_context {
+print_notes :: (console_out: *EFI_Simple_Text_Output_Protocol, notes: *ELF_Note, notes_end: *ELF_Note) #no_context {
    note := notes;
    
    while note < notes_end {
