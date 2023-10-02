@@ -2,7 +2,7 @@ initialize_page_tables :: (memory_map: Sparse_Array(EFI_Memory_Descriptor)) {
    set_cr0(get_cr0() & ~.WRITE_PROTECT);
    
    // Set up a recursive mapping
-   top_level_page_table.entries[511] = .PRESENT | .WRITABLE | .WRITE_THROUGH | .CACHE_DISABLE | .ADDRESS_MASK & xx *top_level_page_table;
+   top_level_page_table.entries[511] = .PRESENT | .WRITABLE | .WRITE_THROUGH | .CACHE_DISABLE | (.ADDRESS_MASK & xx *top_level_page_table);
    
    print_bufferless("\n--------- Memory Map ---------\n");
    print_bufferless("IDX\tPHYS\tVIRT\tCOUNT\tFLAGS\tTYPE\n");
@@ -41,7 +41,7 @@ initialize_page_tables :: (memory_map: Sparse_Array(EFI_Memory_Descriptor)) {
          case .BOOT_SERVICES_DATA; #through;
          case .CONVENTIONAL; #through;
          case .PERSISTENT;
-            free_physical_page(xx it.physical_start);
+            free_physical_page_range_for_initialization(xx it.physical_start, xx it.number_of_pages);
             freeable += it.number_of_pages;
          
          // The kernel's code, mark as present and usable
@@ -63,7 +63,7 @@ initialize_page_tables :: (memory_map: Sparse_Array(EFI_Memory_Descriptor)) {
          case .UNUSABLE; #through;
          case .UNACCEPTED; #through;
          case;
-            flags = .UNUSABLE | .WRITE_THROUGH | .CACHE_DISABLE;
+            flags = .PERMANENT | .WRITE_THROUGH | .CACHE_DISABLE;
          
          case .RUNTIME_SERVICES_CODE; #through;
          case .RUNTIME_SERVICES_DATA; #through;
@@ -72,7 +72,7 @@ initialize_page_tables :: (memory_map: Sparse_Array(EFI_Memory_Descriptor)) {
          case .MMIO; #through;
          case .MMIO_PORT_SPACE; #through;
          case .PAL_CODE;
-            flags = .UNUSABLE | .WRITE_THROUGH | .CACHE_DISABLE | .PRESENT;
+            flags = .PERMANENT | .WRITE_THROUGH | .CACHE_DISABLE | .PRESENT;
          
          case .LOADER_CODE; #through;
          case .BOOT_SERVICES_CODE; #through;
@@ -87,22 +87,71 @@ initialize_page_tables :: (memory_map: Sparse_Array(EFI_Memory_Descriptor)) {
       
       start: u64 = xx it.physical_start & xx Page_Table_Entry.ADDRESS_MASK;
       end := start + (it.number_of_pages << 12);
-      mark_page_table_range(start, end, flags, page_table = *top_level_page_table);
+      mark_page_table_range(start, end, flags, page_table = *top_level_page_table, use_recursive_page_table = false);
    }
    
-   set_cr3(.WRITE_THROUGH | .CACHE_DISABLE | .ADDRESS_MASK & xx *top_level_page_table);
+   set_cr3(.WRITE_THROUGH | .CACHE_DISABLE | (.ADDRESS_MASK & xx *top_level_page_table));
    set_cr0(get_cr0() | .WRITE_PROTECT);
 }
 
-mark_page_table_range :: (start: u64, end: u64, flags: Page_Table_Entry, $level := 5, page_table: *Page_Table = xx 0xFFFF_FFFF_FFFF_F000) {
-   TABLE_FLAGS: Page_Table_Entry : .WRITE_THROUGH | .CACHE_DISABLE;
+allocate_virtual_page_during_physical_allocation :: (address: u64, scratch: u64) -> address: *void, scratch_pages_used: int, success: bool {
+   has_lvl5 := has_level_5();
+   scratch_pages_used := 0;
    
+   lvl5, lvl4, lvl3, lvl2, lvl1: *Page_Table = ---;
+   
+   lvl4_index: int = xx (ifx has_lvl5 then (address >> 48) & 0x1FF else 0x1FF);
+   lvl3_index: int = xx ((address >> 39) & 0x1FF);
+   lvl2_index: int = xx ((address >> 30) & 0x1FF);
+   lvl1_index: int = xx ((address >> 21) & 0x1FF);
+   page_index: int = xx ((address >> 12) & 0x1FF);
+   
+   lvl4_entry := get_page_table_entry(lvl4_index);
+   lvl3_entry := get_page_table_entry(lvl3_index, lvl4_index);
+   lvl2_entry := get_page_table_entry(lvl2_index, lvl3_index, lvl4_index);
+   lvl1_entry := get_page_table_entry(lvl1_index, lvl2_index, lvl3_index, lvl4_index);
+   page_entry := get_page_table_entry(page_index, lvl1_index, lvl2_index, lvl3_index, lvl4_index);
+   
+   if has_lvl5 && !(lvl4_entry.* & .PRESENT) {
+      scratch_pages_used += 1;
+      lvl4_entry.* = TABLE_FLAGS | .PRESENT | (.ADDRESS_MASK & xx (scratch + 3));
+      lvl4 = get_page_table(lvl4_index);
+   }
+   
+   if !(lvl3_entry.* & .PRESENT) {
+      scratch_pages_used += 1;
+      lvl3_entry.* = TABLE_FLAGS | .PRESENT | (.ADDRESS_MASK & xx (scratch + 2));
+      lvl3 = get_page_table(lvl3_index, lvl4_index);
+   }
+   
+   if !(lvl2_entry.* & .PRESENT) {
+      scratch_pages_used += 1;
+      lvl2_entry.* = TABLE_FLAGS | .PRESENT | (.ADDRESS_MASK & xx (scratch + 1));
+      lvl2 = get_page_table(lvl2_index, lvl3_index, lvl4_index);
+   }
+   
+   if !(lvl1_entry.* & .PRESENT) {
+      scratch_pages_used += 1;
+      lvl1_entry.* = TABLE_FLAGS | .PRESENT | (.ADDRESS_MASK & xx (scratch + 0));
+      lvl1 = get_page_table(lvl1_index, lvl2_index, lvl3_index, lvl4_index);
+   }
+   
+   if page_entry.* & .PRESENT {
+      return null, scratch_pages_used, false;
+   }
+   
+   page_entry.* = .WRITABLE | .PRESENT | (.ADDRESS_MASK & xx address);
+   page := canonicalize(address);
+   return page, scratch_pages_used, true;
+}
+
+mark_page_table_range :: (start: u64, end: u64, flags: Page_Table_Entry, $level := 5, page_table: *Page_Table = xx 0xFFFF_FFFF_FFFF_F000, $use_recursive_page_table := true) {
    SHIFT :: 12 + (level-1) * 9;
    ALIGN :: -1 << SHIFT;
    
    #if level == 5 {
       if !has_level_5() {
-         mark_page_table_range(start, end, flags, 4, page_table);
+         mark_page_table_range(start, end, flags, 4, page_table, use_recursive_page_table);
          return;
       }
    }
@@ -118,15 +167,14 @@ mark_page_table_range :: (start: u64, end: u64, flags: Page_Table_Entry, $level 
       
       #if level == 1 {
          page_table.entries[it] |= .ADDRESS_MASK & xx start;
-      } else {
-         child_table: *Page_Table;
-         
-         if page_table.entries[it] & .ADDRESS_MASK {
-            child_table = xx canonicalize(xx (page_table.entries[it] & .ADDRESS_MASK));
-            mark_page_table_range(start, end, flags, level-1, child_table);
-            continue;
+      } else if page_table.entries[it] & .ADDRESS_MASK {
+         #if use_recursive_page_table {
+            child_table: *Page_Table = xx (((cast(u64) page_table) << 9) | (it << 12));
+         } else {
+            child_table: *Page_Table = xx canonicalize(xx (page_table.entries[it] & .ADDRESS_MASK));
          }
-         
+         mark_page_table_range(start, end, flags, level-1, child_table, use_recursive_page_table);
+      } else {
          #if level == 2 || level == 3 {
             start_is_flat := !(start & ~ALIGN);
             spans_entire_range := next_start <= end;
@@ -137,36 +185,12 @@ mark_page_table_range :: (start: u64, end: u64, flags: Page_Table_Entry, $level 
             }
          }
          
-         child_table = xx allocate_physical_page();
+         child_table: *Page_Table = xx allocate_physical_page();
          memset(child_table, 0, size_of(Page_Table));
-         page_table.entries[it] |= TABLE_FLAGS | .ADDRESS_MASK & xx child_table;
-         mark_page_table_range(start, end, flags, level-1, child_table);
+         page_table.entries[it] |= TABLE_FLAGS | (.ADDRESS_MASK & xx child_table);
+         mark_page_table_range(start, end, flags, level-1, child_table, use_recursive_page_table);
       }
    }
-}
-
-// to_virtual_address :: (physical_address: *void) -> *void {
-   
-// }
-
-allocate_physical_page :: () -> *void {
-   cr0 := get_cr0();
-   set_cr0(cr0 & ~.WRITE_PROTECT);
-   defer set_cr0(cr0);
-   
-   node := physical_allocator.next_free;
-   physical_allocator.next_free = node.next_free;
-   return node;
-}
-
-free_physical_page :: (page: *void) {
-   cr0 := get_cr0();
-   set_cr0(cr0 & ~.WRITE_PROTECT);
-   defer set_cr0(cr0);
-   
-   node: *Physical_Allocator_Node = xx page;
-   node.next_free = physical_allocator.next_free;
-   physical_allocator.next_free = node;
 }
 
 canonicalize :: (address: u64) -> *void {
@@ -182,6 +206,8 @@ decanonicalize :: (address: *void) -> u64 {
 
 physical_allocator: Physical_Allocator_Node;
 top_level_page_table: Page_Table;
+
+TABLE_FLAGS: Page_Table_Entry : .WRITE_THROUGH | .CACHE_DISABLE;
 
 Physical_Allocator_Node :: struct {
    next_free: *#this;
@@ -204,7 +230,7 @@ Page_Table_Entry :: enum_flags u64 {
    PAT_LVL1        :: 1 << 7; // If Lvl1
    GLOBAL          :: 1 << 8; // If (LARGE_PAGE or Lvl1) and CR4.PAGE_GLOBAL_ENABLE
    //              :: 1 << 8; // Otherwise
-   UNUSABLE        :: 1 << 9; // (custom)
+   PERMANENT       :: 1 << 9; // (custom)
    //              :: 1 << 10;
    RESTART         :: 1 << 11; // For HLAT paging
    PAT             :: 1 << 12; // If LARGE_PAGE
@@ -226,19 +252,23 @@ Page_Table_Entry :: enum_flags u64 {
    NOT_EXECUTABLE  :: 1 << 63; // If IA32_EFER.NXE
 }
 
-has_level_5 :: () -> bool {
+has_level_5 :: inline () -> bool {
    return !!(get_cr4() & .LINEAR_ADDRESS_57);
 }
 
-get_page_table_entry :: (lvl1 := 511, lvl2 := 511, lvl3 := 511, lvl4 := 511, lvl5 := 511) -> *Page_Table_Entry {
-   return xx ((127 << 57) | (511 << 48) | (lvl5 << 39) | (lvl4 << 30) | (lvl3 << 21) | (lvl2 << 12) | (lvl1 << 3));
+get_page_table_entry :: inline (page: int, lvl1 := 511, lvl2 := 511, lvl3 := 511, lvl4 := 511) -> *Page_Table_Entry {
+   return xx ((0x7F << 57) | (0x1FF << 48) | (lvl4 << 39) | (lvl3 << 30) | (lvl2 << 21) | (lvl1 << 12) | (page << 3));
 }
 
-get_address_shift :: () -> int {
+get_page_table :: inline (lvl1 := 511, lvl2 := 511, lvl3 := 511, lvl4 := 511) -> *Page_Table {
+   return xx get_page_table_entry(0, lvl1, lvl2, lvl3, lvl4);
+}
+
+get_address_shift :: inline () -> int {
    return ifx has_level_5() then 7 else 14;
 }
 
-get_address_mask :: () -> u64 {
+get_address_mask :: inline () -> u64 {
    return xx ifx has_level_5()
       then 0x01FF_FFFF_FFFF_F000
       else 0x0000_FFFF_FFFF_F000;

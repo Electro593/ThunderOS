@@ -6,9 +6,9 @@ parse_acpi :: (rsdp: *RSDP) -> ACPI {
    rsdp_name := get_name(rsdp);
    assert(rsdp_name == "RSD PTR ", "The RSDP table had the name % instead of \"RSD PTR \"", rsdp_name);
    
-   acpi.xsdt = xx rsdp.rsdt;
+   acpi.rsdt = xx rsdp.rsdt;
    validate_sdt(acpi.rsdt);
-   rsdt_name := get_name(acpi.xsdt);
+   rsdt_name := get_name(acpi.rsdt);
    assert(rsdt_name == "RSDT", "The RSDT table had the name % instead of \"RSDT\"", rsdt_name);
    
    if rsdp.revision >= .RSDP_2_0 {
@@ -78,7 +78,10 @@ initialize_apic :: (using acpi: ACPI) {
       entries += entry.length;
    }
    
-   local_apic.spurious_interrupt_vector |= .ENABLE_APIC | .SPURIOUS_VECTOR_MASK & xx spurious_vector;
+   local_apic_base: u64 = xx local_apic;
+   mark_page_table_range(local_apic_base, local_apic_base + size_of(Local_APIC), .PRESENT | .WRITABLE | .WRITE_THROUGH | .CACHE_DISABLE | .PERMANENT);
+   
+   local_apic.spurious_interrupt_vector |= .ENABLE_APIC | (.SPURIOUS_VECTOR_MASK & xx spurious_vector);
 }
 
 spurious_vector :: 0xFF;

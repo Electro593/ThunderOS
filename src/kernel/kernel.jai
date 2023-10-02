@@ -29,10 +29,8 @@ kernel_entry :: (stack: u64, memory_map: Sparse_Array(EFI_Memory_Descriptor), rs
       print_bufferless("Initialized a serial port at I/O address %\n", cast(*void) port);
    }
    
-   print_bufferless("Initializing the GDT...\n");
-   initialize_gdt();
-   
-   // TODO: Fix stack address (don't use UEFI's)
+   print_bufferless("Initializing the memory map...\n");
+   initialize_page_tables(memory_map);
    
    print_bufferless("Parsing the ACPI...\n");
    acpi := parse_acpi(rsdp);
@@ -40,10 +38,13 @@ kernel_entry :: (stack: u64, memory_map: Sparse_Array(EFI_Memory_Descriptor), rs
    print_bufferless("Initializing the APIC...\n");
    initialize_apic(acpi);
    
+   print_bufferless("Initializing the GDT...\n");
+   initialize_gdt();
+   
    print_bufferless("Initializing the IDT...\n");
    initialize_idt();
    
-   initialize_page_tables(memory_map);
+   (cast(*u64)8).* = 0;
    
    #asm {
       sti;
@@ -76,6 +77,7 @@ interrupt_switch_delta: int #elsewhere kernel_asm;
 
 #load "../shared.jai";
 #load "interrupts.jai";
+#load "physical_allocator.jai";
 
 #load "../drivers/acpi.jai";
 #load "../drivers/cpu.jai";
