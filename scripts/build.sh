@@ -10,8 +10,8 @@ if [ -e build/error.txt ]; then
    rm build/error.txt
 fi
 
-jai src/build.jai
-objcopy --strip-unneeded build/jai_lib.a build/jai_lib.a
+# jai src/build.jai
+# objcopy --strip-unneeded build/jai_lib.a build/jai_lib.a
 
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Wno-builtin-declaration-mismatch -fomit-frame-pointer -fno-asynchronous-unwind-tables -mno-red-zone"
 CFLAGS="$CFLAGS -Isrc -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-braces -Wno-sign-compare -Wno-pointer-sign -Wno-unused-value"
@@ -38,8 +38,8 @@ fi
 
 LFLAGS="-nostdlib -Bsymbolic"
 ld $LFLAGS -shared -Tscripts/elf_${ARCH}_efi.lds build/loader.o -o build/loader.so
-# ld $LFLAGS -r -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel.so
-ld $LFLAGS -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel.so build/jai_lib.a
+ld $LFLAGS -r -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel.so
+# ld $LFLAGS -static -Tscripts/kernel.lds build/kernel.o build/asm.o -o build/kernel.so build/jai_lib.a
 
 if [ $ARCH = "aarch64" ]; then
    EFIARCH="pei-aarch64-little"
@@ -65,12 +65,12 @@ find build/ -name "*.so" | xargs rm 2>/dev/null
 
 
 
-IsMounted=$(mount | grep '/mnt')
+IsMounted=$(mount | grep '/mnt/thunderos')
 if [ "$IsMounted" = "" ]; then
    sudo qemu-nbd -c /dev/nbd0 emulator/disk.vhd
-   sudo mount -t auto -o rw /dev/nbd0p1 /mnt
+   sudo mount -t auto -o rw /dev/nbd0p1 /mnt/thunderos
 fi
-sudo cp build/loader /mnt/EFI/BOOT/BOOTX64.efi
-sudo cp build/kernel /mnt/kernel
+sudo cp build/loader /mnt/thunderos/EFI/BOOT/BOOTX64.efi
+sudo cp build/kernel /mnt/thunderos/kernel
 sudo umount /dev/nbd0p1
 sudo qemu-nbd -d /dev/nbd0
