@@ -1,2 +1,2 @@
 # ThunderOS
-Maybe an OS. We'll see if GNU and UEFI kill me first.
+A hobby OS, built by hand in C, intended as a personal research and learning project.
