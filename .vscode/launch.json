@@ -7,19 +7,16 @@
 			"program": "${workspaceFolder}/build/kernel",
 			"miDebuggerServerAddress": "localhost:1234",
 			"MIMode": "gdb",
-			"cwd": "${workspaceFolder}",
+			"cwd": "/",
 			"preLaunchTask": "Launch Qemu",
 			"setupCommands": [
-				{
-					"description": "Enable pretty-printing for gdb",
-					"text": "-enable-pretty-printing",
-					"ignoreFailures": true
-				},
-                // {
-                //     "text": "source ${workspaceFolder}/scripts/.gdbinit",
-                //     "ignoreFailures": false
-                // }
-			]
+				{ "text": "-enable-pretty-printing" },
+				// { "text": "-gdb-set architecture i386:x86-64:intel" },
+				// { "text": "-gdb-set disassembly-flavor intel" },
+				// { "text": "-gdb-break *0x1000" },
+				// { "text": "source ${workspaceFolder}/scripts/launch.gdbinit" }
+			],
+			"launchCompleteCommand": "exec-continue"
 		}
 	]
 }

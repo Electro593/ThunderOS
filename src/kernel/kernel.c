@@ -11,13 +11,14 @@
 #include <util/mem.h>
 #include <util/str.h>
 #include <util/vector.h>
-#include <kernel/efi.h>
-#include <kernel/kernel.h>
 #include <drivers/acpi.h>
 #include <drivers/descriptors.h>
 #include <drivers/mem.h>
 #include <drivers/pci.h>
 #include <drivers/serial.h>
+#include "kernel.h"
+
+#include <loader/efi.h>
 
 #define MAKE_DUMMY(Name)                                                       \
   void Name() { KernelError(__FILE__, __LINE__, 0, #Name " does not exist"); }

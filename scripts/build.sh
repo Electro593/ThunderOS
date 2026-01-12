@@ -50,7 +50,7 @@ objcopy $SECTIONS     --target $EFIARCH --subsystem=10 build/loader.so build/loa
 objcopy -R .note* -R .comment build/kernel.so build/kernel
 
 
-objdump -l -S -d --source-comment build/loader.so > build/loader.s
+objdump -l -S -d --source-comment build/loader > build/loader.s
 objdump -l -S -d --source-comment build/kernel > build/kernel.s
 objdump --all-headers build/loader_dbg > build/loader.dump
 objdump --all-headers build/kernel > build/kernel.dump

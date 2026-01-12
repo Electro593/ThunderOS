@@ -20,6 +20,12 @@ vptr InterruptSwitches[256] = {
 #undef N
 };
 
+page ISTStacks[7];
+page RingStacks[3];
+
+gdt _GDT;
+tss _TSS;
+
 extern void SetSegments(u16 CS, u16 SS);
 extern void SetTR(u16 GdtOffset);
 

@@ -34,48 +34,12 @@ __asm__(
 	".text								\n"
 );
 
-// asm (
-// "        .globl setjmp         \n"
-// "                              \n"
-// "setjmp: pop  %rsi             \n"
-// "        movq %rbx, 0x00(%rdi) \n"
-// "        movq %rsp, 0x08(%rdi) \n"
-// "        push %rsi             \n"
-// "        movq %rbp, 0x10(%rdi) \n"
-// "        movq %r12, 0x18(%rdi) \n"
-// "        movq %r13, 0x20(%rdi) \n"
-// "        movq %r14, 0x28(%rdi) \n"
-// "        movq %r15, 0x30(%rdi) \n"
-// "        movq %rsi, 0x38(%rdi) \n"
-// "        xor  %rax, %rax       \n"
-// "        ret                   \n"
-// );
-
-// asm (
-// "         .globl longjmp        \n"
-// "                               \n"
-// "longjmp: movl %esi, %eax       \n"
-// "         movq 0x00(%rdi), %rbx \n"
-// "         movq 0x08(%rdi), %rsp \n"
-// "         movq 0x10(%rdi), %rbp \n"
-// "         movq 0x18(%rdi), %r12 \n"
-// "         movq 0x20(%rdi), %r13 \n"
-// "         movq 0x28(%rdi), %r14 \n"
-// "         movq 0x30(%rdi), %r15 \n"
-// "         xor %rdx, %rdx        \n"
-// "         mov $1, %rcx          \n"
-// "         cmp %rax, %rdx        \n"
-// "         cmove %rcx, %rax      \n"
-// "         jmp *0x38(%rdi)       \n"
-// );
-
 #include <shared.h>
-#include <loader/elf.h>
-#include <drivers/acpi.h>
-#include <kernel/efi.h>
+#include "elf.h"
+#include "efi.h"
 
 typedef u32 (*kernel_entry)(
-	rsdp							*RSDP,
+	void							*RSDP,
 	efi_graphics_output_protocol	*GOP,
 	efi_pci_root_bridge_io_protocol *PRBIP,
 	efi_simple_file_system_protocol *SFSP,
@@ -87,7 +51,7 @@ typedef u32 (*kernel_entry)(
 static void
 U64_ToStr(c16 *Buffer, u64 N, u32 Radix)
 {
-	static c08 *Chars =
+	static c08 Chars[64] =
 		"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
 
 	u64 M	= N;
@@ -832,7 +796,7 @@ EFI_Entry(
     }
 #endif
 
-	rsdp *RSDP = NULL;
+	void *RSDP = NULL;
 	for (u32 I = 0; I < SystemTable->ConfigTableEntryCount; I++) {
 		efi_configuration_table ConfigTable = SystemTable->ConfigTable[I];
 		if (*(u64 *) &ConfigTable.VendorGuid.Data1
@@ -843,6 +807,11 @@ EFI_Entry(
 			RSDP = ConfigTable.VendorTable;
 		}
 	}
+
+	SystemTable->ConsoleOut->OutputString(
+		SystemTable->ConsoleOut,
+		u"NOTE: Done with RSDP\r\n"
+	);
 
 	// TODO: Make these asserts handle instead of crashing
 
@@ -862,6 +831,11 @@ EFI_Entry(
 		&EFI_GUID_PCI_ROOT_BRIDGE_IO_PROTOCOL,
 		NULL,
 		(vptr *) &PRBIP
+	);
+
+	SystemTable->ConsoleOut->OutputString(
+		SystemTable->ConsoleOut,
+		u"NOTE: Initilalizing memory map...\r\n"
 	);
 
 	efi_memory_descriptor *MemoryMap;
@@ -891,6 +865,7 @@ EFI_Entry(
 		NULL
 	);
 	SASSERT(EFI_Status_Success, u"ERROR: Could not get memory map\r\n");
+
 	Status = BootServices->ExitBootServices(ImageHandle, MemoryMapKey);
 	SASSERT(EFI_Status_Success, u"ERROR: Could not exit boot services\r\n");
 

@@ -60,6 +60,9 @@ typedef unsigned short	   u16;
 typedef unsigned int	   u32;
 typedef unsigned long long u64;
 
+typedef u64 usize;
+typedef s64 ssize;
+
 STATIC_ASSERT(
 	(sizeof(u08) == 1)
 		&& (sizeof(u16) == 2)

@@ -14,15 +14,17 @@ define wc_print
   echo "\n
 end
 
-info files
-file
-add-symbol-file ./build/kernel 0x1000
-
 set architecture i386:x86-64:intel
 set disassembly-flavor intel
+set osabi none
+
 target remote :1234
 
+add-symbol-file ./build/kernel 0x2000
 break Kernel_Entry
+
+# add-symbol-file ./build/loader_dbg 0x3E444000
+break EFI_Entry
 
 layout split
 
