@@ -7,10 +7,15 @@
 **                                                                           **
 \* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#ifndef _DRIVERS_SERIAL_H
+#define _DRIVERS_SERIAL_H
+
 #include <shared.h>
 
-static inline u64
-U64_Min(u64 A, u64 B)
-{
-	return (A < B) ? A : B;
-}
+u32	 Serial_Init(u32 BaudRate, u16 *Port);
+void Serial_ReadChar(u16 Port, c08 *Char);
+void Serial_WriteChar(u16 Port, c08 Char);
+u32	 Serial_ReadLine(u16 Port, c08 *Buffer, u32 BufferSize);
+void Serial_Write(u16 Port, c08 *Buffer);
+
+#endif

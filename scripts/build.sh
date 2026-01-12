@@ -10,9 +10,6 @@ if [ -e build/error.txt ]; then
    rm build/error.txt
 fi
 
-# jai src/build.jai
-# objcopy --strip-unneeded build/jai_lib.a build/jai_lib.a
-
 CFLAGS="-fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -Wno-builtin-declaration-mismatch -fomit-frame-pointer -fno-asynchronous-unwind-tables -mno-red-zone"
 CFLAGS="$CFLAGS -Isrc -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-missing-braces -Wno-sign-compare -Wno-pointer-sign -Wno-unused-value"
 CFLAGS="$CFLAGS -ggdb3"

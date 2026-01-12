@@ -1,11 +1,11 @@
-;-----------------------------------------------------------------------|
-;                                                                       |
-;  Author: Aria Seiler                                                  |
-;                                                                       |
-;  This program is in the public domain. There is no implied warranty,  |
-;  so use it at your own risk.                                          |
-;                                                                       |
-;-----------------------------------------------------------------------|
+;-----------------------------------------------------------------------;
+;                                                                       ;
+;  Author: Aria Seiler                                                  ;
+;                                                                       ;
+;  This program is in the public domain. There is no implied warranty,  ;
+;  so use it at your own risk.                                          ;
+;                                                                       ;
+;-----------------------------------------------------------------------;
 
 default rel
 
@@ -80,7 +80,7 @@ SetGDTR:
     mov  [gdtr+2], rdi
     mov  [gdtr], si
     lgdt [gdtr]
-    
+
     ; mov rax, rsp
     ; push qword 0x10
     ; push rax
@@ -191,15 +191,15 @@ InterruptSwitchEnd:
     push rcx
     push rbx
     push rax
-    
+
     xor rdx, rdx
     mov dl, [rsp + 128]
     mov ecx, edx
     and ecx, 0x1F
-    
+
     mov rdx, [InterruptHandlers + rdx*8]
     call rdx
-    
+
     mov eax, [APICBase + 0x100]
     mov ebx, 1
     shl ebx, cl
@@ -209,7 +209,7 @@ InterruptSwitchEnd:
         lea rax, [APICBase + 0x0B0]
         mov [rax], dword 1
     .no_eoi:
-    
+
     pop rax
     pop rbx
     pop rcx
@@ -226,7 +226,7 @@ InterruptSwitchEnd:
     pop r14
     pop r15
     popfq
-    
+
     add rsp, 2+8
-    
+
     iretq
