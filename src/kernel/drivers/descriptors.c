@@ -128,6 +128,7 @@ IDT_Init(idt *IDT)
 	IDT_SetEntry(IDT, 28, Exception_HypervisorInjection);
 	IDT_SetEntry(IDT, 29, Exception_VMMCommunication);
 	IDT_SetEntry(IDT, 30, Exception_Security);
+	IDT_SetEntry(IDT, 255, Interrupt_Spurious);
 
 	SetIDTR(IDT, sizeof(idt) - 1);
 }

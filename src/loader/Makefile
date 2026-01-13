@@ -1,12 +1,10 @@
-ROOT := ../../
 NAME := loader
-
-TMP := $(OUT)$(SRC)$(NAME)/
+CWD := $(shell pwd)/
 
 RSCRIPTS := $(ROOT)$(SCRIPTS)
 RSRC := $(ROOT)$(SRC)
 ROUT := $(ROOT)$(OUT)
-RTMP := $(ROOT)$(TMP)
+RTMP := $(ROOT)$(TMP)$(NAME)/
 
 LDS := $(RSCRIPTS)elf_$(ARCH)_efi.lds
 
@@ -18,8 +16,8 @@ CFLAGS += $(CWARNS)
 LDFLAGS := -nostdlib -Bsymbolic -shared -T$(LDS)
 
 SOURCES := $(wildcard *.c) $(wildcard */*.c)
-OBJECTS := $(SOURCES:%.c=$(RTMP)%.o)
 
+OBJECTS := $(SOURCES:%.c=$(RTMP)%.o)
 DIRS := $(ROUT) $(patsubst %,$(RTMP)%,$(dir $(SOURCES)))
 
 .PHONY: loader
@@ -45,8 +43,10 @@ $(ROUT)loader.dump.asm: $(ROUT)loader
 $(ROUT)loader.dump.dat: $(ROUT)loader_dbg
 	objdump -x -s $< > $@
 
-$(RTMP)%.o: %.c
-	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
+$(RTMP)%.o: $(CWD)%.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 $(ROOT)%/:
 	cd $(ROOT) && mkdir -p $*
+
+$(LDS):

@@ -5,7 +5,10 @@
             "label": "Build Program",
             "type": "process",
             "command": "make",
-            "group": "build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
             "problemMatcher": "$gcc",
             "presentation": {
                 "reveal": "always",

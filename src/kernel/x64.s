@@ -168,65 +168,65 @@ InvalidatePage:
     [global label]
     label %+ :
     %if !(i == 8 || (i >= 10 && i <= 14) || i == 17 || i == 21)
-        push qword 0
+        push rdi
     %endif
-    push word i
+    push qword i
     jmp InterruptSwitchEnd
     %assign i i+1
 %endrep
 InterruptSwitchEnd:
+    ; Store the original register values
     pushfq
-    push r15
-    push r14
-    push r13
-    push r12
     push r11
     push r10
     push r9
     push r8
-    push rbp
-    push rdi
-    push rsi
     push rdx
     push rcx
-    push rbx
     push rax
+    push rsi
+    push rdi
 
-    xor rdx, rdx
-    mov dl, [rsp + 128]
-    mov ecx, edx
-    and ecx, 0x1F
+    ; Load our error and interrupt number
+    mov rdi, [rsp + 0x50]
+    mov rsi, [rsp + 0x48]
 
-    mov rdx, [InterruptHandlers + rdx*8]
-    call rdx
+    ; Get the interrupt handler's address
+    lea rax, [rel InterruptHandlers]
+    mov rax, [rax + rsi * 8]
 
-    mov eax, [APICBase + 0x100]
-    mov ebx, 1
-    shl ebx, cl
-    and eax, ebx
+    ; Restore rsi to be passed into the handler, and call
+    mov rsi, [rsp + 0x10]
+    call rax
+
+    ; Get the ISR word for this interrupt
+    mov rsi, [rsp + 0x48]
+    mov cl, sil
+    and rsi, ~0x1F
+    shr rsi, 1
+    lea rax, [rel APICBase + 0x100]
+    mov eax, dword [rax + rsi]
+
+    ; If the corresponding bit is set, write 0 to EOI
+    and cl, 0x1F
+    mov esi, 1
+    shl esi, cl
+    and eax, esi
     cmp eax, 0
     je .no_eoi
-        lea rax, [APICBase + 0x0B0]
-        mov [rax], dword 1
+        mov [rel APICBase + 0x0B0], dword 0
     .no_eoi:
 
+    ; Restore the original register values
+    pop rdi
+    pop rsi
     pop rax
-    pop rbx
     pop rcx
     pop rdx
-    pop rsi
-    pop rdi
-    pop rbp
     pop r8
     pop r9
     pop r10
     pop r11
-    pop r12
-    pop r13
-    pop r14
-    pop r15
     popfq
-
-    add rsp, 2+8
 
     iretq

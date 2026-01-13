@@ -121,6 +121,14 @@ enum elf_relocation_type {
 	ELF_RelocationType_AMD64_GOTPCRelX = 0x2A,
 };
 
+typedef enum {
+	ELF_DynamicType_Null	 = 0,
+	ELF_DynamicType_Rela	 = 7,
+	ELF_DynamicType_RelaSize = 8,
+	ELF_DynamicType_RelaEnt	 = 9,
+	ELF_DynamicType_SymEnt	 = 11,
+} elf_dynamic_type;
+
 typedef struct elf64_header {
 	u08 ID[16];
 	u16 Type;

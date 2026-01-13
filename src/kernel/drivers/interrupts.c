@@ -156,3 +156,9 @@ Exception_Security(u32 ErrorCode)
 {
 	Serial_Write(Global.SerialPort, "Exception hit: Security\r\n");
 }
+
+void
+Interrupt_Spurious(void)
+{
+	Serial_Write(Global.SerialPort, "Interrupt hit: Spurious\r\n");
+}

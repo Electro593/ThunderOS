@@ -35,5 +35,6 @@ void Exception_ControlProtection(u32 ErrorCode);
 void Exception_HypervisorInjection(void);
 void Exception_VMMCommunication(u32 ErrorCode);
 void Exception_Security(u32 ErrorCode);
+void Interrupt_Spurious(void);
 
 #endif

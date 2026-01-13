@@ -10,8 +10,11 @@ else
 endif
 
 export OUT := build/
+export TMP := build/tmp/
 export SRC := src/
 export SCRIPTS := scripts/
+
+export ROOT := $(shell pwd)/
 
 CWARNS := -Wall -Wextra -Werror
 CWARNS += -Wno-unused-function -Wno-unused-variable -Wno-unused-parameter
